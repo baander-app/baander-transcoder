@@ -1,4 +1,3 @@
-
 export class HlsPlaylist {
   private segments: { uri: string, duration: number }[] = [];
 
@@ -6,8 +5,6 @@ export class HlsPlaylist {
     public version: number,
     public targetDuration: number,
     public mediaSequence: number,
-    public playlistType: 'VOD' | 'EVENT',
-    public allowCache = true
   ) {
   }
 
@@ -20,8 +17,7 @@ export class HlsPlaylist {
 #EXT-X-VERSION:${this.version}
 #EXT-X-TARGETDURATION:${this.targetDuration}
 #EXT-X-MEDIA-SEQUENCE:${this.mediaSequence}
-#EXT-X-PLAYLIST-TYPE:${this.playlistType}
-${this.allowCache ? '' : '#EXT-X-ALLOW-CACHE:NO\n'}
+#EXT-X-PLAYLIST-TYPE:VOD
     
 ${this.segments.map(segment => `#EXTINF:${segment.duration.toFixed(6)},\n${segment.uri}`).join('\n')}
     

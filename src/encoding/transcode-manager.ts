@@ -2,14 +2,12 @@ import { Transcode } from './transcode';
 import { OnDestroy, OnInit, Service } from '@tsed/di';
 import { Stream } from './stream';
 import { checkSegmentAvailable, makeSegmentName, makeSegmentPath, Segment, segmentFileExistsSync } from './segment';
-import { $log } from '@tsed/common';
 import { MAX_SEGMENT_GAP, MAX_SEGMENTS } from './config';
 import { HlsProfile } from './profiles/hls-profile';
 import { CACHE_DIR } from '../config/envs';
 import { Ffprobe } from './ffprobe/ffprobe';
 import * as fse from 'fs-extra';
-
-let id = 0;
+import { $log } from '@tsed/common';
 
 @Service()
 export class TranscodeManager implements OnInit, OnDestroy {
@@ -129,6 +127,7 @@ export class TranscodeManager implements OnInit, OnDestroy {
 
      }
 
+     $log.info(`No more segments to transcode for stream ${stream.id}, stopping transcode.`);
      this.stopTranscode(stream);
    }
   }
@@ -144,7 +143,7 @@ export class TranscodeManager implements OnInit, OnDestroy {
   }
 
   $onInit(): Promise<any> | void {
-    setInterval(() => this.monitor(), 1000);
+    setInterval(() => this.monitor(), 200);
   }
 
   $onDestroy(): void | Promise<any> {

@@ -1,12 +1,11 @@
 import { Controller, Inject } from '@tsed/di';
-import { QueryParams } from '@tsed/platform-params';
+import { Context, HeaderParams, PathParams, QueryParams } from '@tsed/platform-params';
 import { Ffprobe } from '../../encoding/ffprobe/ffprobe';
 import { HlsPlaylist } from '../../encoding/hls-playlist';
 import { ContentType, Get } from '@tsed/schema';
-import { $log, Res } from '@tsed/common';
+import { $log } from '@tsed/common';
 import { TranscodeManager } from '../../encoding/transcode-manager';
-import { createHash } from 'node:crypto';
-import * as path from 'path';
+import * as fse from 'fs-extra';
 
 const TARGET_DURATION = 6;
 
@@ -15,53 +14,47 @@ export class StreamController {
   @Inject()
   private transcodeManager: TranscodeManager;
 
-  @Get('/playlist/hls')
+  @Get('/playlist/:hash.m3u8')
   @ContentType('application/vnd.apple.mpegurl')
   async getHlsPlaylist(
+    @PathParams('hash') hash: string,
     @QueryParams('profile') profile: string,
+    @HeaderParams('x-forwarded-proto') protocol: string,
+    @HeaderParams('host') host: string
   ) {
     const filePath = 'C:\\Users\\Martin\\Videos\\big-buck-bunny.mp4';
-    const hash = createHash('sha256').update(filePath).digest('hex');
     const ffprobe = new Ffprobe();
     const report = await ffprobe.probeFile(filePath);
-    const test = JSON.parse(JSON.stringify(report));
 
-    $log.warn(test);
+    const playlist = new HlsPlaylist(7, TARGET_DURATION, 0);
+    let remainingDuration = Number(report.format.duration);
+    let segmentIndex = 0;
 
-    const playlist = new HlsPlaylist(7, TARGET_DURATION, 0, 'VOD');
-    let leftover = Number(report.format.duration);
-    let segment = 0;
-
-    while(leftover > 0) {
-      let thisLength = TARGET_DURATION;
-      if(leftover < 2) {
-        thisLength = leftover;
+    while(remainingDuration > 0) {
+      let currentSegmentDuration = TARGET_DURATION;
+      if(remainingDuration < 2) {
+        currentSegmentDuration = remainingDuration;
       }
 
-      playlist.addSegment(`http://127.0.0.1:8083/rest/stream/segment?hash=${hash}&segment=${segment}&profile=${profile}`, thisLength);
+      playlist.addSegment(`${protocol || 'http'}://${host}/rest/stream/segment?hash=${hash}&segment=${segmentIndex}&profile=${profile}.ts`, remainingDuration);
 
-      leftover -= thisLength;
-      segment++;
+      remainingDuration -= currentSegmentDuration;
+      segmentIndex++;
     }
 
-    const data = playlist.toString();
-
-    return data;
+    return playlist.toString();
   }
 
   @Get('/segment')
   async getSegment(
     @QueryParams('hash') hash: string,
     @QueryParams('segment') segment: number,
-    @Res() response: Res,
+    @Context() ctx: Context,
   ) {
     const file = await this.transcodeManager.serveSegment(hash, segment);
-    $log.info(`Serving segment ${segment} from ${file}.`)
+    $log.info(`Serving segment ${segment} from ${file}.`);
 
-    response.sendFile(path.resolve(file), {
-      headers: {
-        'Content-Type': 'video/mp2t',
-      }
-    });
+    ctx.response.stream(fse.createReadStream(file))
+      .setHeader('Content-Type', 'video/mp2t');
   }
 }

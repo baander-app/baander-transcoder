@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { Configuration, Inject } from '@tsed/di';
 import { PlatformApplication } from '@tsed/common';
-import '@tsed/platform-express'; // /!\ keep this import
+import '@tsed/platform-koa'; // /!\ keep this import
 import '@tsed/ajv';
 import '@tsed/swagger';
 import { config } from './config/index';
@@ -32,12 +32,10 @@ import * as pages from './controllers/pages/index';
     },
   ],
   middlewares: [
-    'cors',
-    'cookie-parser',
-    'compression',
-    'method-override',
-    'json-parser',
-    {use: 'urlencoded-parser', options: {extended: true}},
+    '@koa/cors',
+    'koa-compress',
+    'koa-override',
+    'koa-bodyparser',
   ],
   views: {
     root: join(process.cwd(), '../views'),
@@ -52,7 +50,7 @@ import * as pages from './controllers/pages/index';
     additionalProperties: true,
     disableUnsecureConstructor: false,
     strictGroups: false,
-  }
+  },
 })
 export class Server {
   @Inject()
