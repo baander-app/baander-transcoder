@@ -1,0 +1,33 @@
+
+<html>
+<head>
+  <title>Hls.js demo - basic usage</title>
+</head>
+
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/0.5.14/hls.min.js"></script>
+
+<center>
+  <h1>Hls.js demo - basic usage</h1>
+  <video height="600" id="video" controls></video>
+</center>
+
+<script>
+  var video = document.getElementById('video');
+  if (Hls.isSupported()) {
+    var hls = new Hls({
+      debug: true,
+      xhrSetup: xhr => {
+        xhr.setRequestHeader('X-BAANDER-CLIENT-ID', '12345678');
+      }
+    });
+    hls.loadSource('http://localhost:8083/rest/stream2/testhash/master.m3u8');
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MEDIA_ATTACHED, function () {
+      video.muted = true;
+      video.play();
+    });
+  }
+</script>
+<!-- Cloudflare Pages Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "5f88d3068c5141af9fdad3535a40923f"}'></script><!-- Cloudflare Pages Analytics --></body>
+</html>

@@ -1,5 +1,5 @@
 import { Transcode } from './transcode';
-import { OnDestroy, OnInit, Service } from '@tsed/di';
+import { Inject, OnDestroy, OnInit, Service } from '@tsed/di';
 import { Stream } from './stream';
 import { checkSegmentAvailable, makeSegmentName, makeSegmentPath, Segment, segmentFileExistsSync } from './segment';
 import { MAX_SEGMENT_GAP, MAX_SEGMENTS } from './config';
@@ -8,9 +8,13 @@ import { CACHE_DIR } from '../config/envs';
 import { Ffprobe } from './ffprobe/ffprobe';
 import * as fse from 'fs-extra';
 import { $log } from '@tsed/common';
+import { PrometheusClient } from '../metrics/prometheus-client';
 
 @Service()
 export class TranscodeManager implements OnInit, OnDestroy {
+  @Inject()
+  private readonly prometheusClient: PrometheusClient;
+
   private streams: Stream[] = [];
 
   async serveSegment(hash: string, segment: number) {
@@ -60,6 +64,8 @@ export class TranscodeManager implements OnInit, OnDestroy {
     }
 
     $log.info(`Starting transcode for stream ${stream.id} at segment ${segment}.`);
+
+    this.prometheusClient.incrementTranscodeCounter();
 
     stream.transcode = new Transcode(stream.makeArgs(segment));
     stream.transcode.segment = segment;
@@ -134,6 +140,7 @@ export class TranscodeManager implements OnInit, OnDestroy {
 
   private stopTranscode(stream: Stream) {
     stream.transcode?.stop();
+    this.prometheusClient.decrementTranscodeCounter();
   }
 
   shutdown() {

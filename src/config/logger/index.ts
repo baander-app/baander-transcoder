@@ -1,6 +1,8 @@
-import { $log } from '@tsed/common';
+import { $log, Logger } from '@tsed/common';
 import { isProduction } from '../envs/index';
 import { DILoggerOptions } from '@tsed/di';
+
+$log.name ='baander-transcoder-api';
 
 if (isProduction) {
   $log.appenders.set('stdout', {

@@ -1,21 +1,25 @@
 import { join } from 'path';
 import { Configuration, Inject } from '@tsed/di';
 import { PlatformApplication } from '@tsed/common';
-import '@tsed/platform-koa'; // /!\ keep this import
+import '@tsed/platform-express'; // /!\ keep this import
 import '@tsed/ajv';
 import '@tsed/swagger';
-import { config } from './config/index';
-import * as rest from './controllers/rest/index';
-import * as pages from './controllers/pages/index';
+import * as rest from './http/controllers/api/index';
+import * as pages from './http/controllers/pages/index';
+import { config } from './config';
 
 @Configuration({
   ...config,
+  debug: true,
   acceptMimes: ['application/json'],
   httpPort: process.env.PORT || 8083,
   httpsPort: false,
   disableComponentsScan: true,
   ajv: {
     returnsCoercedValues: true,
+  },
+  logger: {
+    logRequest: false,
   },
   mount: {
     '/rest': [
@@ -32,10 +36,11 @@ import * as pages from './controllers/pages/index';
     },
   ],
   middlewares: [
-    '@koa/cors',
-    'koa-compress',
-    'koa-override',
-    'koa-bodyparser',
+    'cors',
+    'compression',
+    'method-override',
+    'json-parser',
+    {use: 'urlencoded-parser', options: {extended: true}},
   ],
   views: {
     root: join(process.cwd(), '../views'),

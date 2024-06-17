@@ -1,10 +1,10 @@
 import { $log } from '@tsed/common';
-import { PlatformKoa } from "@tsed/platform-koa";
+import { PlatformExpress } from "@tsed/platform-express";
 import { Server } from './server';
 
 async function bootstrap() {
   try {
-    const platform = await PlatformKoa.bootstrap(Server);
+    const platform = await PlatformExpress.bootstrap(Server);
     await platform.listen();
 
     process.on('SIGINT', () => {

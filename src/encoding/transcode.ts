@@ -3,47 +3,41 @@ import { FFMPEG_PATH } from '../config/envs';
 import { ChildProcess, spawn } from 'node:child_process';
 
 export class Transcode {
-  segment: number;
   private process: ChildProcess;
-  private _error: null | Error = null;
+  private promise: Promise<any>;
+  private resolve: (value: any) => void;
+  private reject: (reason: any) => void;
 
-  get error() {
-    return this._error;
+  constructor(public segment:number, private args: string[]) {
+
+
   }
 
-  constructor(private args: string[]) {
+  start() {
+    this.createPromise();
+
     this.process = spawn(FFMPEG_PATH, ['-hide_banner', ...this.args], {
       shell: false,
       windowsVerbatimArguments: true,
     });
 
+    this.process.stderr?.setEncoding('utf-8');
+    this.process.stdout?.setEncoding('utf-8');
 
     this.process.on('error', (err) => {
-      this._error = err;
+      this.onError(err);
     });
 
     this.process.on('exit', (message) => {
       console.info(message);
+
+      this.onSuccess(message);
     });
 
-    this.process.stderr?.setEncoding('utf-8');
-    this.process.stdout?.setEncoding('utf-8');
-
-    this.process.stderr?.on('data', (data) => {
-      console.log(data);
-    });
-
-    this.process.stderr?.on('close', () => {
-      //handle exit
-    });
-
-    this.process.stdout?.on('data', (data) => {
-      console.log(data);
-    });
-
+    return this.promise;
   }
 
-  isRunning() {
+  get isRunning() {
     return this.process.connected;
   }
 
@@ -60,5 +54,28 @@ export class Transcode {
   }
 
   private exitHandler() {
+  }
+
+  private createPromise() {
+    this.promise = new Promise((resolve, reject) => {
+      // Save the resolve and reject functions to be used later
+      this.resolve = resolve;
+      this.reject = reject;
+
+      // Set a timeout to reject the promise
+      setTimeout(() => {
+        reject(new Error('Promise timed out'));
+      }, 5000); // 5 seconds timeout
+    });
+  }
+
+  private onSuccess(value: any) {
+    // Resolve the promise
+    this.resolve(value);
+  }
+
+  private onError(reason: any) {
+    // Reject the promise
+    this.reject(reason);
   }
 }
