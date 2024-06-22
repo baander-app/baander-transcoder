@@ -48,8 +48,6 @@ export abstract class Stream {
   private resolveInitialized: () => void = () => {};
   private initialized = new Promise<void>((resolve) => this.resolveInitialized = () => resolve());
 
-  private activeProcesses = 0;
-
   constructor(
     public file: FileStream,
   ) {
@@ -77,11 +75,6 @@ export abstract class Stream {
   abstract getFlags(): number;
 
   async run(start: number) {
-    if (this.activeProcesses >= MAX_TRANSCODES) {
-      $log.info('Stream@run', `Too many active transcodes, waiting for one to finish`);
-      return;
-    }
-
     $log.info('Stream@run', `Running transcode for ${this.file.mediaReport.mediaPath} (from ${start})`);
 
     const args: string[] = [
@@ -101,7 +94,7 @@ export abstract class Stream {
 
     // Stop at the first finished segment
     for (let i = start; i < end; i++) {
-      const ready = await this.isSegmentReadyAsync(i);
+      const ready = await this.isSegmentReadyBool(i);
       if (ready || this.isSegmentTranscoding(i)) {
         end = i;
         break;
@@ -238,9 +231,8 @@ export abstract class Stream {
       outPath,
     ]);
 
-    const process = spawn('ffmpeg', args);
 
-    updateMapProps(this.heads, encoderId, {process});
+    const process = spawn('ffmpeg', args);
 
     await this.lock.runExclusive(() => {
       this.heads.set(encoderId, {segment: start, end, process});
@@ -329,7 +321,6 @@ export abstract class Stream {
 
       // we can't delete the head directly because it would invalidate the others encoderId
       this.heads.set(encoderId, DeletedHead);
-      this.activeProcesses--;
     });
   }
 
@@ -385,7 +376,8 @@ export abstract class Stream {
   async getSegment(segment: number): Promise<string> {
     await this.initialized;
 
-    const ready = await this.isSegmentReadyAsync(segment);
+    const ready = await this.isSegmentReadyBool(segment);
+    $log.warn('Stream@getSegment', `Segment ${segment} is ready: ${ready}`);
 
     let distance = 0;
     let isScheduled = false;
@@ -415,12 +407,26 @@ export abstract class Stream {
       }
     }
 
-    await this.prepareNextSegments(segment);
+    setImmediate(() => this.prepareNextSegments(segment));
 
     return this.getOutPath(this.segments[segment].encoder).replace('%d', segment.toString());
   }
 
   async isSegmentReadyAsync(segment: number): Promise<boolean> {
+    const seg = this.segments.at(segment);
+
+    if (seg === undefined) {
+      return false;
+    }
+
+    return new Promise<boolean>(resolve => {
+      seg.ready?.then(() => {
+        resolve(true);
+      });
+    });
+  }
+
+  async isSegmentReadyBool(segment: number): Promise<boolean> {
     const seg = this.segments.at(segment);
 
     if (seg === undefined) {

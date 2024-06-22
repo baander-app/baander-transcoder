@@ -1,19 +1,17 @@
 import { Controller, Inject } from '@tsed/di';
-import { Get } from '@tsed/schema';
+import { Get, Header } from '@tsed/schema';
 import { HeaderParams, PathParams } from '@tsed/platform-params';
 import { BadRequest } from '@tsed/exceptions';
 import { Transcoder } from '../../../streaming/transcoder/transcoder';
-import { DirectStreamerService } from '../../../streaming/direct-streamer.service';
 import * as fse from 'fs-extra';
+import {createReadStream, ReadStream} from "fs";
 import { VideoQuality } from '../../../streaming/transcoder/quality';
-import { $log, Req } from '@tsed/common';
+import { $log, Req, Res } from '@tsed/common';
 import { TranscodesStorageService } from '../../../streaming/transcodes-storage.service';
+import { Response, Request } from 'express';
 
 @Controller('/stream2')
 export class StreamController {
-  @Inject()
-  private directStreamerService: DirectStreamerService;
-
   @Inject()
   private transcodesStorageService: TranscodesStorageService;
 
@@ -30,7 +28,7 @@ export class StreamController {
 
     await this.checkIfFileExists(this.filePath);
 
-    return this.directStreamerService.createReadStream(this.filePath);
+    return this.streamFile(this.filePath);
   }
 
   @Get('/:hash/master.m3u8')
@@ -76,30 +74,33 @@ export class StreamController {
     @PathParams('quality') qualityStr: string,
     @Req() request: Request,
   ) {
-    const segmentFile = request.url.split('/').pop();
-    const segment = segmentFile?.split('-')[1];
+    const segmentFile = JSON.parse(JSON.stringify(request.params[0]));
+    const segment = segmentFile?.split('-')[1].split('.')[0];
 
     if (!segment) {
       throw new BadRequest('Invalid segment');
     }
 
-    $log.info('getVideoSegment', clientId, hash, qualityStr, segment);
+    $log.info('StreamController@getVideoSegment', clientId, hash, qualityStr, segment);
 
     const quality = VideoQuality.fromString(qualityStr);
+    const segmentPath = await this.transcodesStorageService.findSegmentPath(hash, quality, segment);
 
-    const segmentPath = await this.transcodesStorageService.findSegmentPath(hash, quality, segmentFile);
+    $log.info('StreamController@getVideoSegment_segmentPath', segmentPath);
 
     if (segmentPath) {
-      $log.info('getVideoSegment', 'found segment in storage');
-
-      return this.directStreamerService.createReadStream(segmentPath);
+      this.streamFile(segmentPath);
+      return;
     }
 
-    const path = await this.transcoder.getVideoSegment(this.filePath, quality, parseInt(segment), clientId);
-    $log.info('getVideoSegment_path', path);
+    return new BadRequest('Segment not found');
 
-    if (typeof path === 'string') {
-      return this.directStreamerService.createReadStream(path);
+    const path = await this.transcoder.getVideoSegment(this.filePath, quality, parseInt(segment), clientId);
+    $log.info('StreamController@getVideoSegment_path', path);
+
+    if (path) {
+      this.streamFile(path);
+      return;
     }
 
     throw new BadRequest('Segment not found');
@@ -109,5 +110,11 @@ export class StreamController {
     if (!await fse.exists(filePath)) {
       throw new BadRequest('File not found');
     }
+  }
+
+  private streamFile(filePath: string): ReadStream {
+    $log.info(`StreamController@streamFile: ${filePath}`);
+
+    return createReadStream(filePath);
   }
 }

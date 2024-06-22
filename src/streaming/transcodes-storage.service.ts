@@ -2,25 +2,36 @@ import { Quality } from './transcoder/quality';
 import path from 'node:path';
 import { TRANSCODE_DIR } from '../config/envs';
 import * as fse from 'fs-extra';
-import { BadRequest } from '@tsed/exceptions';
 import { $log } from '@tsed/common';
+import { minimatch } from 'minimatch';
 
 export class TranscodesStorageService {
-  async findSegmentPath(hash: string, quality: Quality, segment: string): Promise<string | null> {
-    $log.info({hash, quality, segment})
+  async findSegmentPath(hash: string, quality: Quality, segment: number): Promise<string | null> {
+    const files = await this.listTranscodes(hash);
 
-    const filePath = this.makeSegmentPath(hash, quality, segment);
-
-    $log.info({filePath})
-
-    if (!await fse.exists(filePath)) {
+    if (files.length === 0) {
       return null;
     }
 
-    return filePath;
+    const pattern = this.makeSegmentPattern(hash, quality, segment);
+    const fileName = minimatch.match(files, pattern)[0];
+
+    if (!fileName) {
+      return null
+    }
+
+    const fullPath = path.join(TRANSCODE_DIR, hash, fileName);
+
+    $log.warn('TranscodesStorageService: fullPath', fullPath);
+
+    return fullPath;
   }
 
-  makeSegmentPath(hash: string, quality: Quality, segment: string) {
-    return path.join(TRANSCODE_DIR, hash, `segment-${quality}-${segment}`);
+  makeSegmentPattern(hash: string, quality: Quality, segment: number) {
+    return `segment-*-${quality}-${segment}.ts`;
+  }
+
+  async listTranscodes(hash: string): Promise<string[]> {
+    return await fse.readdir(path.join(TRANSCODE_DIR, hash));
   }
 }

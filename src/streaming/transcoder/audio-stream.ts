@@ -17,7 +17,7 @@ export class AudioStream extends Stream {
 
   getTranscodeArgs(segments: string): string[] {
     return [
-      '-map', `0:a:${this.index}`,
+      '-map', `0:a`,
       '-c:a', 'aac',
       '-ac', '2', // should support 5.1, 7.1 etc in the future
       'b:a', '192k', // should support variable bitrate in the future

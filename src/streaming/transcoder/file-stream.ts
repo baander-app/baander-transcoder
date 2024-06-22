@@ -5,6 +5,7 @@ import { MediaReport } from './media-report';
 import * as fse from 'fs-extra';
 import { playlistBuilder } from './hls/playlist-builder';
 import { MutexMap } from '../../utils/mutex-map';
+import { $log } from '@tsed/common';
 
 export class FileStream {
   outputPaths: Set<string> = new Set();
@@ -52,9 +53,11 @@ export class FileStream {
   async videoSegment(quality: Quality, segment: number) {
     const stream = await this.videoStream(quality);
 
-    return stream
-      ? stream.getSegment(segment)
-      : null;
+    const seg = await stream.getSegment(segment);
+
+    $log.debug('videoSegment', seg);
+
+    return seg;
   }
 
   async kill() {
