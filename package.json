@@ -4,11 +4,13 @@
   "description": "",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "yarn run barrels && swc src --out-dir dist -s",
+    "build": "bun run barrels && tsc --project tsconfig.compile.json",
+    "compile": "bun build --target=bun ./src/index.ts --outfile=./dist/index.js",
+    "compile:bin": "bun build --compile ./src/index.ts --outfile=bun-app",
     "barrels": "barrelsby --config .barrelsby.json",
-    "start": "yarn run barrels && node-dev src/index.ts",
+    "start": "bun run barrels && node-dev src/index.ts",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
-    "test": "yarn run test:lint && yarn run test:coverage ",
+    "test": "bun run test:lint && bun run test:coverage ",
     "test:unit": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest",
     "test:coverage": "cross-env NODE_ENV=test vitest run --coverage"

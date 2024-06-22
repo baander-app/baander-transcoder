@@ -29,6 +29,7 @@ export class AudioStream extends Stream {
       encoderId,
       sha: this.file.mediaReport.sha256,
       segmentName: 'segment-a',
+      extension: 'm4a',
       indexOrQuality: this.index,
     });
 

@@ -26,6 +26,7 @@ export class VideoStream extends Stream {
       encoderId,
       sha: this.file.mediaReport.sha256,
       segmentName: 'segment',
+      extension: 'ts',
       indexOrQuality: this.quality,
     });
 

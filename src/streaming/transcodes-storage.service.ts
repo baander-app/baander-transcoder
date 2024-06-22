@@ -32,7 +32,7 @@ export class TranscodesStorageService {
   }
 
   async findAudioSegmentPath(hash: string, segment: number): Promise<string | null> {
-    const audioPattern = `segment-a-*-${segment}.ts`;
+    const audioPattern = `segment-a-*-${segment}.m4a`;
 
     if (!await fse.pathExists(getPathForTranscode(hash))) {
       return null;

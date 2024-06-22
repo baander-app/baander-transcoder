@@ -1,5 +1,6 @@
 import { QUALITIES, Quality, VideoQuality } from '../quality';
 import { FileStream } from '../file-stream';
+import { Audio } from '../media-report';
 
 interface BuildStreamInfLineParams {
   quality: Quality;
@@ -12,14 +13,14 @@ function buildStreamInfLine({quality, bitrate, resolution, codec}: BuildStreamIn
   return `#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=${VideoQuality.averageBitrate(quality)},BANDWIDTH=${VideoQuality.maxBitrate(quality)},RESOLUTION=${resolution},CODECS="${codec}",AUDIO="audio",CLOSED-CAPTIONS=NONE\n./${quality}/index.m3u8\n`;
 }
 
-function buildMediaLine(audio: any) {
+function buildMediaLine(audio: Audio) {
   let name = audio.title || audio.language || `Audio ${audio.index}`;
   let defaultAudio = audio.default ? 'DEFAULT=YES,' : '';
 
   return `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="${audio.language}",NAME="${name}",${defaultAudio}URI="audio/${audio.index}/index.m3u8"\n`;
 }
 
-export function playlistBuilder(fileStream: FileStream) {
+export function masterPlaylistBuilder(fileStream: FileStream) {
   let master = '#EXTM3U\n';
 
   if (fileStream.mediaReport.video) {

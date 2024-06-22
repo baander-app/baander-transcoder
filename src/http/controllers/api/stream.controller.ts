@@ -10,7 +10,7 @@ import { $log, Req, Res } from '@tsed/common';
 import { TranscodesStorageService } from '../../../streaming/transcodes-storage.service';
 import { Response, Request } from 'express';
 import { clone } from '../../../utils/clone';
-import { getMimeType } from '../../../utils/stream-mime';
+import { GuessMime } from '../../middleware/guess-mime';
 
 @Controller('/stream2')
 export class StreamController {
@@ -71,6 +71,7 @@ export class StreamController {
   }
 
   @Get('/:hash/audio/:audioIndex/*')
+  @GuessMime()
   async getAudioSegment(
     @HeaderParams('X-BAANDER-CLIENT-ID') clientId: string,
     @PathParams('hash') hash: string,
@@ -96,6 +97,7 @@ export class StreamController {
   }
 
   @Get('/:hash/:quality/*')
+  @GuessMime()
   async getVideoSegment(
     @HeaderParams('X-BAANDER-CLIENT-ID') clientId: string,
     @PathParams('hash') hash: string,
@@ -135,12 +137,7 @@ export class StreamController {
   private async streamFile(filePath: string, response: Response) {
     $log.info(`StreamController@streamFile: ${filePath}`);
 
-    const fileStream = createReadStream(filePath);
-    const { stream, mime } = await getMimeType(fileStream);
-
-    response.header('content-type', mime)
-
-    return stream.pipe(response);
+    return createReadStream(filePath);
   }
 
   private getSegmentFromRequest(request: Request) {

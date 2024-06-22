@@ -3,7 +3,7 @@ import { Quality } from './quality';
 import { VideoStream } from './video-stream';
 import { MediaReport } from './media-report';
 import * as fse from 'fs-extra';
-import { playlistBuilder } from './hls/playlist-builder';
+import { masterPlaylistBuilder } from './hls/master-playlist-builder';
 import { MutexMap } from '../../utils/mutex-map';
 import { $log } from '@tsed/common';
 
@@ -19,7 +19,7 @@ export class FileStream {
   }
 
   get masterPlaylist() {
-    return playlistBuilder(this);
+    return masterPlaylistBuilder(this);
   }
 
   async audioStream(index: number) {
@@ -29,15 +29,13 @@ export class FileStream {
   async audioIndex(index: number) {
     const audioStream = await this.audioStream(index);
 
-    return audioStream.getIndex();
+    return audioStream.getIndex('audio');
   }
 
   async audioSegment(index: number, segment: number) {
     const stream = await this.audioStream(index);
 
-    return stream
-      ? stream.getSegment(segment)
-      : null;
+    return stream.getSegment(segment);
   }
 
   async videoStream(quality: Quality) {
@@ -47,7 +45,7 @@ export class FileStream {
   async videoIndex(quality: Quality) {
     const videoStream = await this.videoStream(quality);
 
-    return videoStream.getIndex();
+    return videoStream.getIndex('video');
   }
 
   async videoSegment(quality: Quality, segment: number) {

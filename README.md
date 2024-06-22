@@ -25,14 +25,9 @@
 
 ```batch
 # install dependencies
-$ yarn install
-
-# serve
-$ yarn start
-
-# build for production
-$ yarn build
-$ yarn start:prod
+$ bun install
+$ bun run barrels
+$ bun run start
 ```
 
 ## Docker

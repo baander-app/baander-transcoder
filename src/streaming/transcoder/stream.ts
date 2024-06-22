@@ -6,10 +6,11 @@ import * as fse from 'fs-extra';
 import { $log } from '@tsed/common';
 import { Mutex } from 'async-mutex';
 import * as os from 'node:os';
+import { streamPlaylistBuilder } from './hls';
 
 class Segment {
   encoder: number;
-  state: { ready: boolean, isRunning: boolean } = { ready: false, isRunning: false }
+  state: { ready: boolean, isRunning: boolean } = {ready: false, isRunning: false};
 }
 
 class Head {
@@ -34,7 +35,8 @@ export abstract class Stream {
   segments: Segment[] = [];
   heads: Head[] = [];
   private lock = new Mutex();
-  private resolveInitialized: () => void = () => {};
+  private resolveInitialized: () => void = () => {
+  };
   private initialized = new Promise<void>((resolve) => this.resolveInitialized = () => resolve());
 
   constructor(
@@ -92,7 +94,7 @@ export abstract class Stream {
       for (let i = start; i < end; i++) {
         this.segments[i].state.isRunning = state;
       }
-    }
+    };
 
 
     setRunState(true);
@@ -208,7 +210,7 @@ export abstract class Stream {
       // we take a little bit more than that to be extra safe but too much can be harmfull
       // when segments are short (can make the video repeat itself)
       '-segment_time_delta', '0.05',
-      '-segment_format', 'mpegts',
+      //'-segment_format', 'mpegts',
       // segment_times want durations, not timestamps so we must substract the -ss param
       // since we give a greater value to -ss to prevent wrong seeks but -segment_times
       // needs precise segments, we use the keyframe we want to seek to as a reference.
@@ -314,7 +316,6 @@ export abstract class Stream {
       } else {
         $log.info(`ffmpeg ${encoderId} finished successfully`);
 
-        console.log(`Encoder ${encoderId} is done`);
         for (let i = start; i < end; i++) {
           this.setSegmentReady(i);
         }
@@ -324,32 +325,14 @@ export abstract class Stream {
     });
   }
 
-  async getIndex() {
+  async getIndex(type: 'audio' | 'video') {
     await this.initialized;
 
-    let index: string = `#EXTM3U
-#EXT-X-VERSION:6
-#EXT-X-PLAYLIST-TYPE:EVENT
-#EXT-X-START:TIME-OFFSET=0
-#EXT-X-TARGETDURATION:4
-#EXT-X-MEDIA-SEQUENCE:0
-#EXT-X-INDEPENDENT-SEGMENTS
-`;
-
-    const length = this.file.mediaReport.keyFrames.length;
-
-    for (let segment = 0; segment < length - 1; segment++) {
-      index += `#EXTINF:${(this.file.mediaReport.keyFrames[segment + 1] - this.file.mediaReport.keyFrames[segment]).toFixed(6)}\n`;
-      index += `segment-${segment}.ts\n`;
-    }
-
-    const duration = Number.parseFloat(this.file.mediaReport.probe.format.duration);
-
-    index += `#EXTINF:${(duration - this.file.mediaReport.keyFrames[length - 1]).toFixed(6)}\n`;
-    index += `segment-${length - 1}.ts\n`;
-    index += `#EXT-X-ENDLIST`;
-
-    return index;
+    return streamPlaylistBuilder({
+      type,
+      keyFrames: [...this.file.mediaReport.keyFrames],
+      duration: Number.parseFloat(this.file.mediaReport.probe.format.duration),
+    });
   }
 
   getMinEncoderDistance(segment: number): number {
@@ -417,7 +400,7 @@ export abstract class Stream {
   isSegmentReady(segment: number): boolean {
     $log.info('isSegmentReady', segment);
 
-    if(this.segments[segment].state.isRunning) {
+    if (this.segments[segment].state.isRunning) {
       return false;
     }
 
