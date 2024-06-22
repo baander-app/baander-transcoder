@@ -7,7 +7,7 @@ import { minimatch } from 'minimatch';
 
 export class TranscodesStorageService {
   async findSegmentPath(hash: string, quality: Quality, segment: number): Promise<string | null> {
-    if (!await fse.pathExists(path.join(TRANSCODE_DIR, hash))) {
+    if (!await fse.pathExists(getPathForTranscode(hash))) {
       return null;
     }
 
@@ -21,7 +21,7 @@ export class TranscodesStorageService {
     const fileName = minimatch.match(files, pattern)[0];
 
     if (!fileName) {
-      return null
+      return null;
     }
 
     const fullPath = path.join(TRANSCODE_DIR, hash, fileName);
@@ -31,11 +31,35 @@ export class TranscodesStorageService {
     return fullPath;
   }
 
+  async findAudioSegmentPath(hash: string, segment: number): Promise<string | null> {
+    const audioPattern = `segment-a-*-${segment}.ts`;
+
+    if (!await fse.pathExists(getPathForTranscode(hash))) {
+      return null;
+    }
+
+    const files = await this.listTranscodes(hash);
+    const audioFiles = minimatch.match(files, audioPattern);
+    const audioFileName = audioFiles[0];
+
+    if (!audioFileName) {
+      return null;
+    }
+
+    const audioFullPath = path.join(TRANSCODE_DIR, hash, audioFileName);
+
+    $log.warn('TranscodesStorageService: audioFullPath', audioFullPath);
+
+    return audioFullPath;
+  }
+
   makeSegmentPattern(hash: string, quality: Quality, segment: number) {
     return `segment-*-${quality}-${segment}.ts`;
   }
 
   async listTranscodes(hash: string): Promise<string[]> {
-    return await fse.readdir(path.join(TRANSCODE_DIR, hash));
+    return await fse.readdir(getPathForTranscode(hash));
   }
 }
+
+const getPathForTranscode = (hash: string) => path.join(TRANSCODE_DIR, hash);

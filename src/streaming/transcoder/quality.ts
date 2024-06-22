@@ -31,7 +31,7 @@ export class VideoQuality {
       return str as Quality;
     }
 
-    throw new Error('Invalid quality');
+    throw new Error(`Invalid quality ${str}`);
   }
 
   static averageBitrate(v: Quality): number {

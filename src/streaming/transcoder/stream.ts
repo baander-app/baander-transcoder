@@ -3,24 +3,13 @@ import { ChildProcess, spawn } from 'node:child_process';
 import * as readline from 'node:readline';
 import path from 'node:path';
 import * as fse from 'fs-extra';
-import { updateMapProps } from '../../utils/update-map-props';
 import { $log } from '@tsed/common';
 import { Mutex } from 'async-mutex';
 import * as os from 'node:os';
-import { MAX_TRANSCODES } from '../../config/envs';
-
-interface StreamHandle {
-  getTranscodeArgs(segments: string): string[];
-
-  getOutPath(encoder_id: number): string;
-
-  getFlags(): Flags;
-}
 
 class Segment {
-  channel: Promise<void>;
-  setChannelReady: () => void;
   encoder: number;
+  state: { ready: boolean, isRunning: boolean } = { ready: false, isRunning: false }
 }
 
 class Head {
@@ -30,9 +19,9 @@ class Head {
 }
 
 export enum Flags {
-  AudioF = 1 << 0,
-  VideoF = 1 << 1,
-  Transmux = 1 << 3,
+  Audio = 1,
+  Video = 2,
+  Transmux = 3,
 }
 
 export const DeletedHead: Head = {
@@ -52,26 +41,17 @@ export abstract class Stream {
     public file: FileStream,
   ) {
     for (let i = 0; i < this.file.mediaReport.keyFrames.length; i++) {
-      let promiseResolver: () => void = () => {};
-      const promise = new Promise<void>((resolve) => {
-        promiseResolver = resolve;
-      });
-
-      this.segments.push({
-        channel: promise,
-        setChannelReady: promiseResolver,
-        encoder: -1,
-      });
-
-      this.resolveInitialized();
+      this.segments.push(new Segment());
     }
+
+    this.resolveInitialized();
   }
 
   abstract getTranscodeArgs(segments: string): string[];
 
   abstract getOutPath(encoderId: number): string;
 
-  abstract getFlags(): number;
+  abstract getFlags(): Flags[];
 
   async run(start: number) {
     await this.initialized;
@@ -88,15 +68,16 @@ export abstract class Stream {
 
     let end = Math.min(start + 20, length);
 
+    await this.lock.acquire();
+    $log.info('Stream@run', 'Acquired lock');
     // Stop at the first finished segment
     for (let i = start; i < end; i++) {
-      const ready = await this.isSegmentReady(i);
-      if (ready || this.isSegmentTranscoding(i)) {
+      if (this.isSegmentReady(i) || this.isSegmentTranscoding(i)) {
         end = i;
         break;
       }
     }
-    $log.info(`Segment ${start} to ${end} is ready`);
+
     if (start >= end) {
       this.lock.release();
 
@@ -106,9 +87,19 @@ export abstract class Stream {
       // to call run() and the actual call.
       return;
     }
+
+    const setRunState = (state: boolean) => {
+      for (let i = start; i < end; i++) {
+        this.segments[i].state.isRunning = state;
+      }
+    }
+
+
+    setRunState(true);
+
     const encoderId = this.heads.length;
     this.heads.push({segment: start, end, command: null});
-
+    this.lock.release();
     $log.info(`Head ${encoderId} created - released lock`);
 
     $log.info(
@@ -127,7 +118,7 @@ export abstract class Stream {
       //  - Video: if a segment is really short (between 20 and 100ms), the padding given in the else block below is not enough and
       // the previous segment is played another time. the -segment_times is way more precise so it does not do the same with this one
       startSegment = start - 1;
-      if ((this.getFlags() & Flags.AudioF) !== 0) {
+      if (this.getFlags().includes(Flags.Audio)) {
         startRef = this.file.mediaReport.keyFrames[startSegment];
         $log.info('Stream@run', `Audio segment: ${startSegment} - startRef: ${startRef}`);
       } else {
@@ -172,7 +163,7 @@ export abstract class Stream {
     //}
 
     if (startRef !== 0) {
-      if ((this.getFlags() & Flags.VideoF) !== 0) {
+      if (this.getFlags().includes(Flags.Audio)) {
         // This is the default behavior in transmux mode and needed to force pre/post segment to work
         // This must be disabled when processing only audio because it creates gaps in audio
         args.push('-noaccurate_seek');
@@ -231,7 +222,10 @@ export abstract class Stream {
     $log.info('ffmpeg cmd-str', [...args].toString());
 
     const process = spawn('ffmpeg', args);
+
+    await this.lock.acquire();
     this.heads[encoderId].command = process;
+    this.lock.release();
 
     $log.info('Stream@run', `ffmpeg ${encoderId} started`);
 
@@ -269,23 +263,26 @@ export abstract class Stream {
       }
 
       $log.info('Stream@run scanner:', `Segment ${segment} got ready (${encoderId})`);
-      const ready = await this.isSegmentReady(segment);
+      const ready = this.isSegmentReady(segment);
       if (ready) {
         // the current segment is already marked at done so another process has already gone up to here.
         process.kill('SIGINT');
         $log.info('Stream@run scanner:', `Killing ffmpeg because segment ${segment} is already ready`);
         shouldStop = true;
       } else {
+        await this.lock.acquire();
         this.segments[segment].encoder = encoderId;
-        this.segments[segment].setChannelReady();
+        this.setSegmentReady(segment);
 
-        const nextSegmentReady = await this.isSegmentReady(segment + 1);
+        const nextSegmentReady = this.isSegmentReady(segment + 1);
         if (segment === end - 1) {
           // file finished, ffmpeg will finish soon on its own
           shouldStop = true;
         } else if (nextSegmentReady) {
           this.heads[encoderId].command?.kill('SIGINT');
           $log.info('Stream@run scanner:', `Killing ffmpeg because next segment ${segment} is ready`);
+
+          this.lock.release();
           shouldStop = true;
         }
       }
@@ -299,8 +296,10 @@ export abstract class Stream {
       }
     });
 
+    await this.lock.acquire();
     process.on('exit', async (code, signal) => {
       this.lock.release();
+      setRunState(false);
 
       if (signal === 'SIGINT') {
         $log.info(`ffmpeg ${encoderId} was killed by us`);
@@ -308,29 +307,33 @@ export abstract class Stream {
         $log.error(`ffmpeg ${encoderId} occurred an error: ${code}`);
         this.killHead(encoderId);
         // Unresolved segment promises would hang forever without this:
-        for (let i = start; i < end; i++) {
-          this.segments[i].channel = Promise.resolve();
-        }
+        //for (let i = start; i < end; i++) {
+        //  this.setSegmentReady(i);
+        //}
         return;
       } else {
         $log.info(`ffmpeg ${encoderId} finished successfully`);
 
         console.log(`Encoder ${encoderId} is done`);
         for (let i = start; i < end; i++) {
-          this.segments[i].setChannelReady();
+          this.setSegmentReady(i);
         }
       }
 
+      this.heads[encoderId] = DeletedHead;
     });
   }
 
   async getIndex() {
+    await this.initialized;
+
     let index: string = `#EXTM3U
 #EXT-X-VERSION:6
 #EXT-X-PLAYLIST-TYPE:EVENT
 #EXT-X-START:TIME-OFFSET=0
 #EXT-X-TARGETDURATION:4
 #EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-INDEPENDENT-SEGMENTS
 `;
 
     const length = this.file.mediaReport.keyFrames.length;
@@ -377,14 +380,15 @@ export abstract class Stream {
     let distance: number = -1;
     let isScheduled: boolean = false;
 
-    //await this.lock.acquire();
-    ready = await this.isSegmentReady(segment);
+    await this.lock.acquire();
+    ready = this.isSegmentReady(segment);
+    $log.info('Stream@run scanner:', `Segment ${segment} is ${ready ? 'ready' : 'not ready'}`);
 
     if (!ready) {
       distance = this.getMinEncoderDistance(segment);
       isScheduled = this.heads.some(head => head.segment <= segment && segment < head.end);
     }
-    //this.lock.release();
+    this.lock.release();
 
     if (!ready) {
       if (distance > 60 || !isScheduled) {
@@ -395,7 +399,7 @@ export abstract class Stream {
         }
       }
       try {
-        await waitFor(this.segments[segment].channel, 60 * 1000);
+        this.isSegmentReady(segment);
       } catch (e) {
         if (e.message === 'timeout') {
           throw new Error('Could not retrieve the selected segment (timeout)');
@@ -407,26 +411,22 @@ export abstract class Stream {
 
     setImmediate(() => this.prepareNextSegments(segment));
 
-    return this.getOutPath(this.segments[segment].encoder).replace('%d', segment.toString());
+    return this.getOutPath(this.segments[segment].encoder);
   }
 
-  async isSegmentReady(index: number) {
-    if (index >= this.segments.length)
+  isSegmentReady(segment: number): boolean {
+    $log.info('isSegmentReady', segment);
+
+    if(this.segments[segment].state.isRunning) {
       return false;
-    else if (this.segments[index].channel !== undefined)
-      return new Promise<boolean>( (resolve ) => {
-        let timerId = setTimeout(() => {
-          resolve(false);
-        }, 1000);
-        this.segments[index].channel.then(() => {
-          resolve(true);
-          if (timerId) {
-            clearTimeout(timerId);
-          }
-        })
-      });
-    else
-      return false;
+    }
+
+    return this.segments[segment].state.ready;
+  }
+
+  setSegmentReady(segment: number): void {
+    this.segments[segment].state.isRunning = false;
+    this.segments[segment].state.ready = true;
   }
 
   isSegmentTranscoding(index: number) {
@@ -444,56 +444,25 @@ export abstract class Stream {
   }
 
   async prepareNextSegments(segment: number) {
-    if ((this.getFlags() & Flags.VideoF) !== 0)
-      return;
+    await this.initialized;
 
+    if (!this.getFlags().includes(Flags.Video)) {
+      return;
+    }
 
     let i: number;
     for (i = segment + 1; i <= Math.min(segment + 10, this.segments.length - 1); i++) {
-      if (this.segments[i].channel !== undefined)
+      if (this.isSegmentReady(i))
         continue;
 
       if (this.getMinEncoderDistance(i) < 60 + 5 * (i - segment))
         continue;
 
       console.log(`Creating new head for future segment ${i}`);
-      await this.run(i);
+      setImmediate(() => this.run(i));
       break;
     }
 
-  }
-
-  async removeOutdated() {
-    const segments = this.file.mediaReport.keyFrames.length;
-    let segmentToKeep = -1;
-
-    for (let i = 0; i < segments - 100; i++) {
-      if (this.segments[i].channel !== undefined)
-        segmentToKeep = i;
-      else if (segmentToKeep < i - 10)
-        break;
-    }
-
-    if (segmentToKeep < 0)
-      return;
-
-    console.log(`Cleaning ${segmentToKeep} segments; keeping ${segments - segmentToKeep} segments`);
-    const queue = [];
-
-    for (let i = 0; i < segmentToKeep; i++) {
-      if (this.segments[i].channel !== undefined)
-        await this.segments[i].channel;
-
-      queue.push(fse.unlink(this.getOutPath(this.segments[i].encoder)));
-    }
-
-    await Promise.allSettled(queue);
-
-    this.segments = this.segments.slice(segmentToKeep);
-    this.heads.forEach(head => {
-      head.segment -= segmentToKeep;
-      head.end -= segmentToKeep;
-    });
   }
 
   async kill() {
@@ -526,4 +495,22 @@ async function waitFor(p: Promise<unknown>, ms: number): Promise<void> {
       clearTimeout(timer);
     }
   }
+}
+
+function waitForCommand(object: Head, interval: number = 200, timeout: number = 60000): Promise<ChildProcess> {
+  return new Promise((resolve, reject) => {
+    const checkStartTime = Date.now();
+
+    const intervalId = setInterval(() => {
+      if (object?.command) {
+        clearInterval(intervalId);
+        resolve(object.command);
+      }
+
+      if (Date.now() - checkStartTime > timeout) {
+        clearInterval(intervalId);
+        reject(new Error('Timeout waiting for ready state'));
+      }
+    }, interval);
+  });
 }

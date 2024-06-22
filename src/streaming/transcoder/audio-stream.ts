@@ -11,8 +11,8 @@ export class AudioStream extends Stream {
     super(file);
   }
 
-  getFlags(): number {
-    return Flags.AudioF;
+  getFlags(): Flags[] {
+    return [Flags.Audio];
   }
 
   getTranscodeArgs(segments: string): string[] {
@@ -20,7 +20,7 @@ export class AudioStream extends Stream {
       '-map', `0:a:0`,
       '-c:a', 'aac',
       '-ac', '2', // should support 5.1, 7.1 etc in the future
-      'b:a', '192k', // should support variable bitrate in the future
+      '-b:a', '192k', // should support variable bitrate in the future
     ];
   }
 
@@ -28,6 +28,7 @@ export class AudioStream extends Stream {
     const path = TranscodeConfig.transcodePath({
       encoderId,
       sha: this.file.mediaReport.sha256,
+      segmentName: 'segment-a',
       indexOrQuality: this.index,
     });
 

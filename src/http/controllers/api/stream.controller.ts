@@ -9,6 +9,8 @@ import { VideoQuality } from '../../../streaming/transcoder/quality';
 import { $log, Req, Res } from '@tsed/common';
 import { TranscodesStorageService } from '../../../streaming/transcodes-storage.service';
 import { Response, Request } from 'express';
+import { clone } from '../../../utils/clone';
+import { getMimeType } from '../../../utils/stream-mime';
 
 @Controller('/stream2')
 export class StreamController {
@@ -24,11 +26,12 @@ export class StreamController {
   async directStream(
     @HeaderParams('X-BAANDER-CLIENT-ID') clientId: string,
     @PathParams('hash') hash: string,
+    @Res() response: Response,
   ) {
 
     await this.checkIfFileExists(this.filePath);
 
-    return this.streamFile(this.filePath);
+    return this.streamFile(this.filePath, response);
   }
 
   @Get('/:hash/master.m3u8')
@@ -67,19 +70,40 @@ export class StreamController {
     return this.transcoder.getAudioIndex(this.filePath, audioIndex, clientId);
   }
 
+  @Get('/:hash/audio/:audioIndex/*')
+  async getAudioSegment(
+    @HeaderParams('X-BAANDER-CLIENT-ID') clientId: string,
+    @PathParams('hash') hash: string,
+    @PathParams('audioIndex') audioIndex: number,
+    @Req() request: Request,
+    @Res() response: Response,
+  ) {
+    const segment = this.getSegmentFromRequest(request);
+
+    $log.info('StreamController@getAudioSegment', clientId, hash, audioIndex);
+
+    const filePath = await this.transcodesStorageService.findAudioSegmentPath(hash, segment);
+    if (filePath) {
+      return this.streamFile(filePath, response);
+    }
+
+    const path = await this.transcoder.getAudioSegment(this.filePath, audioIndex, segment, clientId);
+    if (filePath) {
+      return this.streamFile(filePath, response);
+    }
+
+    throw new BadRequest('Segment not found');
+  }
+
   @Get('/:hash/:quality/*')
   async getVideoSegment(
     @HeaderParams('X-BAANDER-CLIENT-ID') clientId: string,
     @PathParams('hash') hash: string,
     @PathParams('quality') qualityStr: string,
     @Req() request: Request,
+    @Res() response: Response,
   ) {
-    const segmentFile = JSON.parse(JSON.stringify(request.params[0]));
-    const segment = segmentFile?.split('-')[1].split('.')[0];
-
-    if (!segment) {
-      throw new BadRequest('Invalid segment');
-    }
+    const segment = this.getSegmentFromRequest(request);
 
     $log.info('StreamController@getVideoSegment', clientId, hash, qualityStr, segment);
 
@@ -89,16 +113,14 @@ export class StreamController {
     $log.info('StreamController@getVideoSegment_segmentPath 1', segmentPath);
 
     if (segmentPath !== null) {
-      this.streamFile(segmentPath);
-      return;
+      return this.streamFile(segmentPath, response);
     }
 
-    const path = await this.transcoder.getVideoSegment(this.filePath, quality, parseInt(segment), clientId);
+    const path = await this.transcoder.getVideoSegment(this.filePath, quality, segment, clientId);
     $log.info('StreamController@getVideoSegment_path 2', path);
 
     if (path) {
-      this.streamFile(path);
-      return;
+      return this.streamFile(path, response);
     }
 
     throw new BadRequest('Segment not found');
@@ -110,9 +132,25 @@ export class StreamController {
     }
   }
 
-  private streamFile(filePath: string): ReadStream {
+  private async streamFile(filePath: string, response: Response) {
     $log.info(`StreamController@streamFile: ${filePath}`);
 
-    return createReadStream(filePath);
+    const fileStream = createReadStream(filePath);
+    const { stream, mime } = await getMimeType(fileStream);
+
+    response.header('content-type', mime)
+
+    return stream.pipe(response);
+  }
+
+  private getSegmentFromRequest(request: Request) {
+    const segmentFile = clone(request.params[0]);
+    const segment = segmentFile?.split('-')[1].split('.')[0];
+
+    if (!segment) {
+      throw new BadRequest('Invalid segment');
+    }
+
+    return parseInt(segment);
   }
 }

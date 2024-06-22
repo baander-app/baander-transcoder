@@ -13,18 +13,19 @@ export class VideoStream extends Stream {
     super(fileStream);
   }
 
-  getFlags(): number {
+  getFlags(): Flags[] {
     if (this.quality === Quality.Original) {
-      return Flags.VideoF | Flags.Transmux;
+      return [Flags.Video, Flags.Transmux];
     }
 
-    return Flags.VideoF;
+    return [Flags.Video];
   }
 
   getOutPath(encoderId: number) {
     const path = TranscodeConfig.transcodePath({
       encoderId,
       sha: this.file.mediaReport.sha256,
+      segmentName: 'segment',
       indexOrQuality: this.quality,
     });
 
