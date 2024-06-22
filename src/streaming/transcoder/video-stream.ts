@@ -1,5 +1,5 @@
 import { Quality, VideoQuality } from './quality';
-import { Flags, Stream, StreamConfig } from './stream';
+import { Flags, Stream } from './stream';
 import { TranscodeConfig } from './transcode-config';
 import { FileStream } from './file-stream';
 
@@ -36,7 +36,7 @@ export class VideoStream extends Stream {
   getTranscodeArgs(segments: string): string[] {
     const args = [
       '-map',
-      '0:v',
+      '0:v:0',
     ];
 
     if (this.quality === Quality.Original) {

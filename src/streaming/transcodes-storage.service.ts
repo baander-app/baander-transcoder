@@ -7,6 +7,10 @@ import { minimatch } from 'minimatch';
 
 export class TranscodesStorageService {
   async findSegmentPath(hash: string, quality: Quality, segment: number): Promise<string | null> {
+    if (!await fse.pathExists(path.join(TRANSCODE_DIR, hash))) {
+      return null;
+    }
+
     const files = await this.listTranscodes(hash);
 
     if (files.length === 0) {

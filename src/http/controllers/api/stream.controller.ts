@@ -86,17 +86,15 @@ export class StreamController {
     const quality = VideoQuality.fromString(qualityStr);
     const segmentPath = await this.transcodesStorageService.findSegmentPath(hash, quality, segment);
 
-    $log.info('StreamController@getVideoSegment_segmentPath', segmentPath);
+    $log.info('StreamController@getVideoSegment_segmentPath 1', segmentPath);
 
-    if (segmentPath) {
+    if (segmentPath !== null) {
       this.streamFile(segmentPath);
       return;
     }
 
-    return new BadRequest('Segment not found');
-
     const path = await this.transcoder.getVideoSegment(this.filePath, quality, parseInt(segment), clientId);
-    $log.info('StreamController@getVideoSegment_path', path);
+    $log.info('StreamController@getVideoSegment_path 2', path);
 
     if (path) {
       this.streamFile(path);

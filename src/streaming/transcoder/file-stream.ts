@@ -55,8 +55,6 @@ export class FileStream {
 
     const seg = await stream.getSegment(segment);
 
-    $log.debug('videoSegment', seg);
-
     return seg;
   }
 
