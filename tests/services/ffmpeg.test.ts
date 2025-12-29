@@ -20,8 +20,8 @@ vi.mock('fs/promises', () => ({
 }));
 
 // Mock transcoder options
-vi.mock('../../src/services/transcoder', () => ({
-  transcodeOptions: {
+vi.mock('../../src/services/mediaTranscoder', () => ({
+  mediaTranscodeOptions: {
     trickplay: false
   }
 }));

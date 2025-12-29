@@ -7,15 +7,15 @@ import { mediaService } from '../../src/services/media';
 import * as hls from '../../src/services/hls';
 import * as dash from '../../src/services/dash';
 import * as ffmpeg from '../../src/services/ffmpeg';
-import { getTranscoder } from '../../src/services/transcoder';
+
 
 vi.mock('../../src/services/media');
 vi.mock('../../src/services/hls');
 vi.mock('../../src/services/dash');
 vi.mock('../../src/services/ffmpeg');
-vi.mock('../../src/services/transcoder', () => ({
-  getTranscoder: vi.fn(),
-  transcodeOptions: {
+vi.mock('../../src/services/mediaTranscoder', () => ({
+  getMediaTranscoder: vi.fn(),
+  mediaTranscodeOptions: {
     variants: [{ height: 720, bitrate: '2500k' }],
     audio: { codec: 'aac', bitrate: '128k', channels: 2 },
     segmentDuration: 5,

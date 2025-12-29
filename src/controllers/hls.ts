@@ -6,15 +6,16 @@ import {
   RESOLUTION_PLACEHOLDER,
   SEGMENT_PLACEHOLDER,
 } from '../services/hls';
-import { getTranscoder, transcodeOptions } from '../services/transcoder';
+import { getClientInfoFromRequest } from '../utils/clientDetection';
+import { getMediaTranscoder, mediaTranscodeOptions } from '../services/mediaTranscoder';
 import { mediaService } from '../services/media';
 import { getOptionsOverride, handleError } from './utils';
 import { router } from '../services/router';
 import { getPlaylistCache, getRateLimiter } from '../services/http';
 import { getSegmentExtension } from '../utils/paths';
 import { getVideoInfo } from '../services/ffmpeg';
-import send from 'send';
 import { logger } from '../services/logger';
+import path from 'path';
 
 export const hlsRouter = express.Router();
 
@@ -35,7 +36,7 @@ hlsRouter.get('/playlist/:id{.m3u8}', getRateLimiter().middleware(), async (req,
     logger.debug(`[HLS] Resolved playlist entry path: ${entry.path}`);
     const captions = await mediaService.getCaptions(entry, req.protocol, req.headers.host!);
     const overrides = getOptionsOverride(req);
-    const options = {...transcodeOptions, ...overrides};
+    const options = {...mediaTranscodeOptions, ...overrides};
 
     res.set('Content-Type', 'application/vnd.apple.mpegurl');
     let playlist: string;
@@ -102,7 +103,7 @@ hlsRouter.get('/variant/:height/playlist/:id{.m3u8}', getRateLimiter().middlewar
 
     logger.debug(`[HLS] Resolved variant playlist entry path: ${entry.path} (height: ${height}${isOriginal ? ', original quality' : ''})`);
     const overrides = getOptionsOverride(req);
-    const options = {...transcodeOptions, ...overrides};
+    const options = {...mediaTranscodeOptions, ...overrides};
 
     res.set('Content-Type', 'application/vnd.apple.mpegurl');
     const template = router.url('hls.segment', {
@@ -175,11 +176,11 @@ hlsRouter.get('/segments/:height/init/:id', async (req, res) => {
 
     logger.debug(`[HLS] Init segment request: ${pathParam} (height: ${height})`);
     const overrides = getOptionsOverride(req);
-    const transcoder = getTranscoder(entry.id, entry.path, overrides);
+    const transcoder = getMediaTranscoder(entry.id, entry.path, overrides);
     const initPath = await transcoder.requestHlsInit(height);
     logger.debug(`[HLS] Serving init segment from: ${initPath}`);
     res.setHeader('Content-Type', 'video/mp4');
-    res.sendFile(initPath);
+    res.sendFile(path.resolve(initPath));
   } catch (err) {
     handleError(err, res);
   }
@@ -187,8 +188,20 @@ hlsRouter.get('/segments/:height/init/:id', async (req, res) => {
 
 hlsRouter.get('/segments/:height/:segment/:id', async (req, res) => {
   try {
+    // Debug logging to help identify parameter issues
+    logger.debug(`[HLS] Segment route params:`, req.params);
+    logger.debug(`[HLS] Full URL: ${req.originalUrl}`);
+
     let height = parseInt(req.params.height, 10);
     const segmentStr = req.params.segment;
+
+    // Validate that segment parameter exists
+    if (!segmentStr) {
+      logger.error(`[HLS] Missing segment parameter. Raw params:`, req.params);
+      logger.error(`[HLS] Full URL when segment missing: ${req.originalUrl}`);
+      return handleError(new Error('Missing segment parameter'), res);
+    }
+
     const segmentMatch = segmentStr.match(/segment_(\d+)\.(?:ts|m4s)/);
     if (!segmentMatch || !segmentMatch[1]) {
       logger.error(`[HLS] Invalid segment request: '${segmentStr}' (height: ${height}, id: ${req.params.id}). Raw Params:`, req.params);
@@ -217,7 +230,7 @@ hlsRouter.get('/segments/:height/:segment/:id', async (req, res) => {
 
     logger.debug(`[HLS] Segment request: ${pathParam} (height: ${height}, segment: ${segment})`);
     const overrides = getOptionsOverride(req);
-    const transcoder = getTranscoder(entry.id, entry.path, overrides);
+    const transcoder = getMediaTranscoder(entry.id, entry.path, overrides);
     const segmentPath = await transcoder.requestSegment(segment, height);
     logger.debug(`[HLS] Serving segment from: ${segmentPath}`);
 
@@ -227,7 +240,7 @@ hlsRouter.get('/segments/:height/:segment/:id', async (req, res) => {
       res.setHeader('Content-Type', 'video/mp2t');
     }
 
-    res.sendFile(segmentPath);
+    res.sendFile(path.resolve(segmentPath));
   } catch (err) {
     handleError(err, res);
   }
@@ -240,47 +253,14 @@ hlsRouter.get('/config/:id', async (req, res) => {
     const entry = await mediaService.getEntry(pathParam);
     const videoInfo = await getVideoInfo(entry.path);
     const overrides = getOptionsOverride(req);
-    const options = {...transcodeOptions, ...overrides};
+    const options = {...mediaTranscodeOptions, ...overrides};
 
     // Return player configuration
     const config = {
       hlsConfig: {
-        maxBufferSize: 60, // seconds
-        maxBufferLength: 120, // seconds
-        maxMaxBufferLength: 600, // seconds
-        maxSeekHole: 6.0, // seconds
-        maxFragLookUpTolerance: 0.25,
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 10,
-        preferManagedMediaSource: true,
-        liveDurationInfinity: true,
+        maxBufferLength: 10,
         lowLatencyMode: options.lowLatency,
-        maxBufferHole: 0.5,
-        backBufferLength: 90,
-        nudgeOffset: 0.1,
-        nudgeMaxRetry: 3,
-        maxSkipHoles: 2,
-        // ABR configuration
-        abrBandWidthFactor: 0.9,
-        abrBandWidthUpFactor: 0.7,
-        abrMaxWithRealBitrate: false,
-        abrEwmaFastLive: 3.0,
-        abrEwmaSlowLive: 9.0,
-        abrEwmaFastVoD: 3.0,
-        abrEwmaSlowVoD: 9.0,
-        abrEwmaDefaultEstimate: 500000, // 500 kbps
-        abrEwmaDefaultEstimateMax: 5000000, // 5 Mbps
-        abrThroughThroughputFactor: 1.2,
-        abrThroughputFactor: 1.2,
-        // Segment management
-        maxStarvationDelay: 4,
-        maxLoadingDelay: 4,
-        maxStarvationDelayWithoutClock: 10,
-        minAutoBitrate: 0,
-        maxAutoBitrate: Infinity,
-        emeEnabled: false,
-        widevineLicenseUrl: '',
-        drmSystemOptions: {}
+
       },
       videoInfo: {
         duration: videoInfo.duration,
@@ -289,8 +269,8 @@ hlsRouter.get('/config/:id', async (req, res) => {
         frameRate: videoInfo.frameRate,
         bitrate: videoInfo.format.bit_rate ? parseInt(videoInfo.format.bit_rate) : 0,
         segmentDuration: options.segmentDuration,
-        variantCount: options.variants.length
-      }
+        variantCount: options.variants.length,
+      },
     };
 
     res.setHeader('Content-Type', 'application/json');
@@ -307,11 +287,11 @@ hlsRouter.get('/i-frame/:index/:id', async (req, res) => {
     const index = parseInt(req.params.index, 10);
     const pathParam = req.params.id;
     const entry = await mediaService.getEntry(pathParam);
-    const transcoder = getTranscoder(entry.id, entry.path);
+    const transcoder = getMediaTranscoder(entry.id, entry.path);
     const iFramePath = await transcoder.requestIFrame(index);
     res.setHeader('Content-Type', 'video/mp2t');
-    res.sendFile(iFramePath);
-  } catch (err) {
+    res.sendFile(path.resolve(iFramePath));
+  } catch (err: unknown) {
     handleError(err, res);
   }
 });

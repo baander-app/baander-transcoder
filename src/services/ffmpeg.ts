@@ -4,7 +4,7 @@ import * as fssync from 'fs';
 import * as path from 'path';
 import * as util from 'util';
 import * as crypto from 'crypto';
-import { transcodeOptions } from '../services/transcoder';
+import { mediaTranscodeOptions } from '../services/mediaTranscoder';
 import { homeDir } from '../state';
 import { getCacheDir, getIFrameCacheDir } from '../utils/paths';
 import { logger } from './logger';
@@ -148,7 +148,7 @@ async function executeProbe(filePath: string, signal?: AbortSignal): Promise<Vid
         }
       }
 
-      if (transcodeOptions.trickplay) {
+      if (mediaTranscodeOptions.trickplay) {
         const iframeOut = await runCommand(ffprobePath, [
           '-select_streams', 'v',
           '-show_packets',

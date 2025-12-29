@@ -19,16 +19,16 @@ export interface RootFolder {
 }
 
 export interface TranscodeVariant {
+  id: string; // Unique identifier for this variant
   height: number;
   bitrate: string;
-  original?: boolean; // Flag to indicate this is the original quality
   videoStreamIndex?: number; // Index of the video stream to use (defaults to 0)
 }
 
 export interface AudioOptions {
-  codec: AudioCodec;
   bitrate: string;
   channels: number;
+  defaultCodec: 'aac' | 'opus' | 'copy'; // Default codec for clients (defaults to 'aac')
 }
 
 export interface TranscodeOptions {
@@ -70,9 +70,17 @@ export interface HttpOptions {
   cacheTTL: number;
 }
 
+export interface SocketOptions {
+  enabled: boolean;
+  path: string;
+  maxMessageSize: number;
+  connectionTimeout: number;
+}
+
 export interface Config {
   folders: RootFolder[];
   http?: HttpOptions;
+  socket?: SocketOptions;
   transcode?: TranscodeOptions;
   ffmpeg?: string;
   ffprobe?: string;
@@ -107,18 +115,24 @@ export function getConfig(configPath: string): Config {
       },
       cacheTTL: parsed.http?.cacheTTL || 5,
     },
+    socket: {
+      enabled: parsed.socket?.enabled || false,
+      path: parsed.socket?.path || '/tmp/baander-transcoder.sock',
+      maxMessageSize: parsed.socket?.maxMessageSize || 100 * 1024 * 1024, // 100MB
+      connectionTimeout: parsed.socket?.connectionTimeout || 30000, // 30 seconds
+    },
     transcode: {
       variants: parsed.transcode?.variants || [
-        {height: 0, bitrate: '0k', original: true}, // Original quality
-        {height: 1080, bitrate: '5000k'},
-        {height: 720, bitrate: '2800k'},
-        {height: 480, bitrate: '1400k'},
+        {id: 'original', height: -1, bitrate: 'original'}, // Original quality
+        {id: '1080p', height: 1080, bitrate: '5000k'},
+        {id: '720p', height: 720, bitrate: '2800k'},
+        {id: '480p', height: 480, bitrate: '1400k'},
       ],
       preset: parsed.transcode?.preset || 'fast',
       audio: {
-        codec: (SUPPORTED_AUDIO_CODECS.includes(parsed.transcode?.audio?.codec) ? parsed.transcode.audio.codec : 'aac'),
         bitrate: parsed.transcode?.audio?.bitrate || '192k',
         channels: parsed.transcode?.audio?.channels || 2,
+        defaultCodec: parsed.transcode?.audio?.defaultCodec || 'aac',
       },
       trickplay: parsed.transcode?.trickplay || false,
       onDemand: parsed.transcode?.onDemand || false,

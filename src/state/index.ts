@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CompoundIndex, Index, MemIndex } from '../indexing';
 import { Config } from '../config';
-import { Transcoder } from '../services/transcoder';
+import { MediaTranscoder } from '../services/mediaTranscoder';
 
 export let homeDir = '.baander-transcoder';
 
@@ -34,7 +34,7 @@ class StateManager {
     await fs.writeFile(this.statePath, JSON.stringify(data, null, 2));
   }
 
-  async saveTranscoder(id: string, transcoder: Transcoder) {
+  async saveTranscoder(id: string, transcoder: MediaTranscoder) {
     const transcoderPath = path.join(homeDir, 'transcoders', `${id}.json`);
     await fs.mkdir(path.dirname(transcoderPath), {recursive: true});
     const data = {

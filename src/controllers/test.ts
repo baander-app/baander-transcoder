@@ -139,13 +139,8 @@ testRouter.get('/hls/:path', async (req, res) => {
               // Fallback config
               return {
                 debug: true,
-                autoLevelEnabled: true,
+                autoLevelEnabled: false,
                 fragLoadingTimeOut: 15000,
-                maxBufferSize: 60,
-                maxBufferLength: 120,
-                maxMaxBufferLength: 600,
-                abrBandWidthFactor: 0.9,
-                abrBandWidthUpFactor: 0.7
               };
             }
           }
@@ -159,11 +154,8 @@ testRouter.get('/hls/:path', async (req, res) => {
               debug: true,
               enableWorker: true,
               lowLatencyMode: config.lowLatencyMode || false,
-              backBufferLength: config.backBufferLength || 90,
-              maxBufferHole: config.maxBufferHole || 0.5,
-              maxStarvationDelay: config.maxStarvationDelay || 4,
-              maxLoadingDelay: config.maxLoadingDelay || 4,
-              maxSeekHole: config.maxSeekHole || 6.0
+              maxBufferLength: config.maxBufferLength || 6,
+              manifestLoadingTimeOut: 20000
             });
 
             hls.loadSource('${playlistUrl}');

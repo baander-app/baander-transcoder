@@ -1,5 +1,5 @@
 import { getVideoInfo } from './ffmpeg';
-import { transcodeOptions, TranscodeOptions } from './transcoder';
+import { mediaTranscodeOptions, TranscodeOptions } from './mediaTranscoder';
 import { mediaService } from './media';
 import { router } from './router';
 import * as fs from 'fs/promises';
@@ -10,10 +10,10 @@ export const RESOLUTION_PLACEHOLDER = '__RESOLUTION__';
 export const SEGMENT_PLACEHOLDER = '__SEGMENT__';
 
 function getHlsSegmentLength() {
-  return transcodeOptions.segmentDuration;
+  return mediaTranscodeOptions.segmentDuration;
 }
 
-export async function generateMasterPlaylist(file: string, protocol: string, host: string, pathParam: string, captions: string[] = [], options: TranscodeOptions = transcodeOptions): Promise<string> {
+export async function generateMasterPlaylist(file: string, protocol: string, host: string, pathParam: string, captions: string[] = [], options: TranscodeOptions = mediaTranscodeOptions): Promise<string> {
   const info = await getVideoInfo(file);
   let output = '#EXTM3U\n#EXT-X-VERSION:4\n';
 
@@ -66,12 +66,12 @@ export async function generateMasterPlaylist(file: string, protocol: string, hos
       return;
     }
 
-    if (v.original) {
+    if (v.height === -1 && v.bitrate === 'original') {
       // For original variant, use the specific video stream's dimensions
       outWidth = videoStream.width || info.width;
       displayHeight = videoStream.height || info.height;
       // Use source video bitrate if available, otherwise estimate
-      bandwidth = (videoStream.bit_rate ? parseInt(videoStream.bit_rate) : (v.bitrate ? parseInt(v.bitrate) * 1000 : 0)) + parseInt(options.audio.bitrate.replace('k', '000'));
+      bandwidth = (videoStream.bit_rate ? parseInt(videoStream.bit_rate) : (v.bitrate && v.bitrate !== 'original' ? parseInt(v.bitrate) * 1000 : 0)) + parseInt(options.audio.bitrate.replace('k', '000'));
     } else {
       // For transcoded variants, scale based on the specific video stream
       const sourceHeight = videoStream.height || info.height;
@@ -101,13 +101,10 @@ export async function generateMasterPlaylist(file: string, protocol: string, hos
       }
     }
 
-    let audioCodecString = 'mp4a.40.2';
-    switch (options.audio.codec) {
+    let audioCodecString: string;
+    switch (options.audio.defaultCodec) {
       case 'opus':
         audioCodecString = 'opus';
-        break;
-      case 'mp3':
-        audioCodecString = 'mp3';
         break;
       case 'aac':
       default:
@@ -140,13 +137,16 @@ export async function generateMasterPlaylist(file: string, protocol: string, hos
     output += `
 `;
 
-    let variantUrl = router.url('hls.variant', {height: v.original ? -1 : v.height, id: pathParam}, reqMock);
+    let variantUrl = router.url('hls.variant', {
+      height: (v.height === -1 && v.bitrate === 'original') ? -1 : v.height,
+      id: pathParam,
+    }, reqMock);
     const params = new URLSearchParams();
     if (options.audioOnly) params.set('audioOnly', 'true');
-    if (options.hwAccel !== transcodeOptions.hwAccel) params.set('hwaccel', options.hwAccel);
-    if (options.videoCodec !== transcodeOptions.videoCodec) params.set('vcodec', options.videoCodec);
-    if (options.audio.codec !== transcodeOptions.audio.codec) params.set('acodec', options.audio.codec);
-    if (options.lowLatency !== transcodeOptions.lowLatency) params.set('lowLatency', String(options.lowLatency));
+    if (options.hwAccel !== mediaTranscodeOptions.hwAccel) params.set('hwaccel', options.hwAccel);
+    if (options.videoCodec !== mediaTranscodeOptions.videoCodec) params.set('vcodec', options.videoCodec);
+    if (options.audio.defaultCodec !== (mediaTranscodeOptions.audio.defaultCodec || 'aac')) params.set('acodec', options.audio.defaultCodec);
+    if (options.lowLatency !== mediaTranscodeOptions.lowLatency) params.set('lowLatency', String(options.lowLatency));
 
     const qs = params.toString();
     if (qs) {
@@ -164,7 +164,7 @@ export async function generateMasterPlaylist(file: string, protocol: string, hos
   return output;
 }
 
-export async function generatePlaylist(template: string, file: string, resolution: number, options: TranscodeOptions = transcodeOptions, initUrl?: string): Promise<string> {
+export async function generatePlaylist(template: string, file: string, resolution: number, options: TranscodeOptions = mediaTranscodeOptions, initUrl?: string, audioCodec: string = options.audio.defaultCodec || 'aac'): Promise<string> {
   const info = await getVideoInfo(file);
   let str = '#EXTM3U\n';
   str += '#EXT-X-VERSION:6\n'; // Use version 6 for better support
@@ -195,7 +195,7 @@ export async function generatePlaylist(template: string, file: string, resolutio
   return str;
 }
 
-export async function generateAudioPlaylist(template: string, file: string, index: number, options: TranscodeOptions = transcodeOptions, initUrl?: string): Promise<string> {
+export async function generateAudioPlaylist(template: string, file: string, index: number, options: TranscodeOptions = mediaTranscodeOptions, initUrl?: string): Promise<string> {
   const info = await getVideoInfo(file);
   let str = '#EXTM3U\n';
   str += '#EXT-X-VERSION:4\n';

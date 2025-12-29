@@ -37,7 +37,7 @@ export class PriorityQueue<T> {
   }
 
   peek(): Task<T> | undefined {
-    return this.items[0];
+    return this.items.at(0);
   }
 
   get(id: string): Task<T> | undefined {

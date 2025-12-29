@@ -1,11 +1,12 @@
 import * as express from 'express';
 import { generateAudioPlaylist, generateMasterPlaylist, SEGMENT_PLACEHOLDER } from '../services/hls';
-import { getTranscoder, transcodeOptions } from '../services/transcoder';
+import { getMediaTranscoder, mediaTranscodeOptions } from '../services/mediaTranscoder';
 import { mediaService } from '../services/media';
 import { getOptionsOverride, handleError } from './utils';
 import { router } from '../services/router';
 import { getSegmentExtension } from '../utils/paths';
 import { logger } from '../services/logger';
+import path from 'path';
 
 export const audioRouter = express.Router();
 
@@ -20,7 +21,7 @@ audioRouter.get('/:index/playlist/:id{.m3u8}', async (req, res) => {
     const pathParam = req.params.id;
     const entry = await mediaService.getEntry(pathParam);
     const overrides = getOptionsOverride(req);
-    const options = {...transcodeOptions, ...overrides};
+    const options = {...mediaTranscodeOptions, ...overrides};
 
     res.set('Content-Type', 'application/vnd.apple.mpegurl');
     // Template points to audio controller segment route
@@ -70,7 +71,7 @@ audioRouter.get('/:index/segment/:segment/:id{.:ext}', async (req, res) => {
     const pathParam = req.params.ext ? `${req.params.id}.${req.params.ext}` : req.params.id;
     const entry = await mediaService.getEntry(pathParam);
     const overrides = getOptionsOverride(req);
-    const transcoder = getTranscoder(entry.id, entry.path, overrides);
+    const transcoder = getMediaTranscoder(entry.id, entry.path, overrides);
 
     const segmentPath = await transcoder.requestHlsAudioSegment(segment, index);
 
@@ -80,7 +81,7 @@ audioRouter.get('/:index/segment/:segment/:id{.:ext}', async (req, res) => {
       res.setHeader('Content-Type', 'audio/mp2t');
     }
 
-    res.sendFile(segmentPath);
+    res.sendFile(path.resolve(segmentPath));
   } catch (err) {
     handleError(err, res);
   }
@@ -94,11 +95,11 @@ audioRouter.get('/:index/init/:id{.:ext}', async (req, res) => {
     const pathParam = req.params.ext ? `${req.params.id}.${req.params.ext}` : req.params.id;
     const entry = await mediaService.getEntry(pathParam);
     const overrides = getOptionsOverride(req);
-    const transcoder = getTranscoder(entry.id, entry.path, overrides);
+    const transcoder = getMediaTranscoder(entry.id, entry.path, overrides);
 
     const initPath = await transcoder.requestHlsAudioInit(index);
     res.setHeader('Content-Type', 'video/mp4');
-    res.sendFile(initPath);
+    res.sendFile(path.resolve(initPath));
   } catch (err) {
     handleError(err, res);
   }
@@ -110,7 +111,7 @@ audioRouter.get('/playlist/:id{.m3u8}', async (req, res) => {
     const pathParam = req.params.id;
     const entry = await mediaService.getEntry(pathParam);
     const overrides = getOptionsOverride(req);
-    const options = {...transcodeOptions, ...overrides, audioOnly: true};
+    const options = {...mediaTranscodeOptions, ...overrides, audioOnly: true};
 
     res.set('Content-Type', 'application/vnd.apple.mpegurl');
     const playlist = await generateMasterPlaylist(entry.path, req.protocol, req.headers.host!, pathParam, [], options);

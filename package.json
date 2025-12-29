@@ -39,7 +39,6 @@
     "@types/node": "^24.10.1",
     "@types/send": "^1.2.1",
     "@types/supertest": "^6.0.3",
-    "errorhandler": "^1.5.1",
     "rimraf": "^6.1.2",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",

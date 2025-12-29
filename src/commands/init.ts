@@ -15,30 +15,38 @@ const defaultConfig: Config = {
   'transcode': {
     'variants': [
       {
+        'id': 'original',
+        'height': -1,
+        'bitrate': 'original',
+      },
+      {
+        'id': '1080p',
         'height': 1080,
         'bitrate': '5000k',
       },
       {
+        'id': '720p',
         'height': 720,
         'bitrate': '2800k',
       },
       {
+        'id': '480p',
         'height': 480,
         'bitrate': '1400k',
       },
     ],
     'preset': 'fast',
     'audio': {
-      'codec': 'aac',
       'bitrate': '192k',
       'channels': 2,
+      'defaultCodec': 'aac',
     },
     'trickplay': true,
     'onDemand': true,
     'idleTimeout': 5,
     'throttleBufferSize': 300,
     'minThrottleBufferSize': 60,
-    'segmentDuration': 5,
+    'segmentDuration': 6,
     'hwAccel': 'cpu',
     'videoCodec': 'h264',
     'hlsSegmentType': 'fmp4',

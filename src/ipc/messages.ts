@@ -7,7 +7,7 @@ export interface IPCMessageRegistry {
     sessionId: string;
     file: string;
     config: TranscodeOptions;
-    height: number;
+    variantId: string;
     outputDir: string;
     format: 'hls' | 'dash';
     startTime: number;

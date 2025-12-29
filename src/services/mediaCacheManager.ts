@@ -102,6 +102,65 @@ export class MediaCacheManager {
     logger.debug(`[MediaCacheManager] Marked segment as complete: ${key}:${request.segmentNumber}`);
   }
 
+  async checkInitSegmentStatus(request: { mediaId: string, config: VideoConfig | AudioConfig }): Promise<SegmentStatus> {
+    const { mediaId, config } = request;
+    let segmentPath: string;
+
+    if ('height' in config) {
+      segmentPath = mediaCachePaths.getVideoInitSegmentPath(mediaId, config as VideoConfig);
+    } else {
+      segmentPath = mediaCachePaths.getAudioInitSegmentPath(mediaId, config as AudioConfig);
+    }
+
+    const exists = await this.fileExists(segmentPath);
+    return { exists, path: exists ? segmentPath : undefined };
+  }
+
+  async storeInitSegment(request: { mediaId: string, config: VideoConfig | AudioConfig }, sourcePath: string): Promise<string> {
+    const { mediaId, config } = request;
+    let destPath: string;
+
+    if ('height' in config) {
+      destPath = mediaCachePaths.getVideoInitSegmentPath(mediaId, config as VideoConfig);
+    } else {
+      destPath = mediaCachePaths.getAudioInitSegmentPath(mediaId, config as AudioConfig);
+    }
+
+    try {
+      await fs.mkdir(path.dirname(destPath), { recursive: true });
+      await fs.copyFile(sourcePath, destPath);
+      logger.debug(`[MediaCacheManager] Stored init segment for ${mediaId} at ${destPath}`);
+      return destPath;
+    } catch (error) {
+      logger.error(`[MediaCacheManager] Failed to store init segment for ${mediaId}: ${error}`);
+      throw error;
+    }
+  }
+
+  async storeSegment(request: SegmentRequest, sourcePath: string): Promise<string> {
+    const { mediaId, config, segmentNumber } = request;
+    let destPath: string;
+
+    if ('height' in config) {
+      destPath = mediaCachePaths.getVideoSegmentPath(mediaId, config as VideoConfig, segmentNumber);
+    } else if ('bitrate' in config && 'channels' in config) {
+      destPath = mediaCachePaths.getAudioSegmentPath(mediaId, config as AudioConfig, segmentNumber);
+    } else {
+      destPath = mediaCachePaths.getSubtitleSegmentPath(mediaId, config as SubtitleConfig, segmentNumber);
+    }
+
+    try {
+      await fs.mkdir(path.dirname(destPath), { recursive: true });
+      await fs.copyFile(sourcePath, destPath);
+      logger.debug(`[MediaCacheManager] Stored segment ${segmentNumber} for ${mediaId} at ${destPath}`);
+      this.markSegmentComplete(request);
+      return destPath;
+    } catch (error) {
+      logger.error(`[MediaCacheManager] Failed to store segment ${segmentNumber} for ${mediaId}: ${error}`);
+      throw error;
+    }
+  }
+
   /**
    * Check if a segment is currently being processed
    */

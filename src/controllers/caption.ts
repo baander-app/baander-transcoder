@@ -14,7 +14,7 @@ captionRouter.get('/frame/:id', async (req, res) => {
     if (req.query.t) time = parseInt(req.query.t as string, 10);
     const framePath = await getFramePath(entry.path, time);
     res.set('Content-Type', 'image/jpeg');
-    res.sendFile(framePath);
+    res.sendFile(path.resolve(framePath));
   } catch (err) {
     handleError(err, res);
   }
@@ -37,7 +37,7 @@ captionRouter.get('/captions/:id', async (req, res) => {
     const entry = await mediaService.getEntry(pathParam);
     const captionPath = await getCaptionPath(entry.path);
     res.set('Content-Type', 'text/vtt');
-    res.sendFile(captionPath);
+    res.sendFile(path.resolve(captionPath));
   } catch (err) {
     handleError(err, res);
   }
@@ -48,7 +48,7 @@ captionRouter.get('/trickplay/:id/playlist.m3u8', async (req, res) => {
     const pathParam = req.params.id;
     const entry = await mediaService.getEntry(pathParam);
     const dir = mediaService.getTrickplayDir(entry);
-    res.sendFile(path.join(dir, 'tiles.m3u8'));
+    res.sendFile(path.resolve(path.join(dir, 'tiles.m3u8')));
   } catch (err) {
     handleError(err, res);
   }
@@ -64,7 +64,7 @@ captionRouter.get('/trickplay/:id/:filename', async (req, res) => {
     }
     const entry = await mediaService.getEntry(pathParam);
     const dir = mediaService.getTrickplayDir(entry);
-    res.sendFile(path.join(dir, filename));
+    res.sendFile(path.resolve(path.join(dir, filename)));
   } catch (err) {
     handleError(err, res);
   }

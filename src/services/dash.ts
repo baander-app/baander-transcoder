@@ -1,8 +1,8 @@
 import { getVideoInfo } from './ffmpeg';
-import { transcodeOptions, TranscodeOptions } from './transcoder';
+import { mediaTranscodeOptions, TranscodeOptions } from './mediaTranscoder';
 import { parseInt } from 'lodash';
 
-export async function generateDashManifest(file: string, host: string, pathParam: string, captions: string[] = [], options: TranscodeOptions = transcodeOptions): Promise<string> {
+export async function generateDashManifest(file: string, host: string, pathParam: string, captions: string[] = [], options: TranscodeOptions = mediaTranscodeOptions): Promise<string> {
   const info = await getVideoInfo(file);
   const duration = info.duration;
   const segmentDuration = options.segmentDuration;
@@ -39,9 +39,9 @@ export async function generateDashManifest(file: string, host: string, pathParam
       return;
     }
 
-    if (v.original) {
+    if (v.height === -1 && v.bitrate === 'original') {
       // For original variant, use the specific video stream's properties
-      bandwidth = (videoStream.bit_rate ? parseInt(videoStream.bit_rate) : (v.bitrate ? parseInt(v.bitrate) * 1000 : 0));
+      bandwidth = (videoStream.bit_rate ? parseInt(videoStream.bit_rate) : (v.bitrate && v.bitrate !== 'original' ? parseInt(v.bitrate) * 1000 : 0));
       width = videoStream.width || info.width;
       height = videoStream.height || info.height;
     } else {

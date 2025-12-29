@@ -48,7 +48,7 @@ streamRouter.get('/download/:id', async (req, res) => {
     const downloadPath = await getDownloadPath(entry.path, start, duration);
     res.set('Content-Disposition', `attachment; filename="${path.basename(downloadPath)}"`);
     res.set('Content-Type', mime.getType(downloadPath) || 'application/octet-stream');
-    res.sendFile(downloadPath);
+    res.sendFile(path.resolve(downloadPath));
   } catch (err) {
     handleError(err, res);
   }

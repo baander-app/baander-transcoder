@@ -11,7 +11,7 @@ export class Session {
 
   constructor(
     sessionId: string,
-    height: number,
+    variantId: string,
     format: string,
     startSegment: number,
     config: SessionConfig,
@@ -21,7 +21,8 @@ export class Session {
     this._data = {
       id: sessionId,
       startSegment,
-      height,
+      variantId,
+      height: this.extractHeightFromVariantId(variantId),
       format,
       lastUsed: now,
       isPaused: false,
@@ -44,8 +45,19 @@ export class Session {
     return this._data.startSegment;
   }
 
+  get variantId(): string {
+    return this._data.variantId;
+  }
+
+  // Alias for backward compatibility
   get height(): number {
     return this._data.height;
+  }
+
+  private extractHeightFromVariantId(variantId: string): number {
+    // Extract height from variant ID for legacy compatibility
+    const match = variantId.match(/(\d+)p/);
+    return match ? parseInt(match[1]) : 0;
   }
 
   get format(): string {
@@ -185,15 +197,15 @@ export class Session {
   // Static factory method for creating sessions from hash
   static createFromInput(
     inputSource: string,
-    height: number,
+    variantId: string,
     format: string,
     startSegment: number,
     config: SessionConfig,
     configHash: string,
     videoStreamIndex: number = 0,
   ): Session {
-    const hashInput = `${inputSource}-${height}-${format}-${startSegment}-${configHash}-${videoStreamIndex}`;
+    const hashInput = `${inputSource}-${variantId}-${format}-${startSegment}-${configHash}-${videoStreamIndex}`;
     const sessionId = sha256(hashInput);
-    return new Session(sessionId, height, format, startSegment, config);
+    return new Session(sessionId, variantId, format, startSegment, config);
   }
 }

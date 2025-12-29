@@ -23,7 +23,7 @@ export interface SegmenterOptions {
   input: string;
   outputDir: string;
   config: TranscodeOptions;
-  height: number;
+  variantId: string;
   startTime?: number;
   startNumber?: number;
   format: 'hls' | 'dash';
@@ -32,6 +32,26 @@ export interface SegmenterOptions {
 
 function hashArgs(args: string[]): string {
   return sha256(args.join('\n'));
+}
+
+/**
+ * Select optimal audio codec based on source audio and client preferences
+ */
+function selectOptimalAudioCodec(sourceAudioCodec?: string, defaultCodec: string = 'aac'): string {
+  // If no source audio info, use default
+  if (!sourceAudioCodec) {
+    return defaultCodec;
+  }
+
+  const sourceCodec = sourceAudioCodec.toLowerCase();
+
+  // If source codec is already high quality and compatible, use direct copy
+  if (['aac', 'opus'].includes(sourceCodec)) {
+    return 'copy';
+  }
+
+  // Otherwise use the default codec
+  return defaultCodec;
 }
 
 export class Segmenter extends EventEmitter {
@@ -80,7 +100,7 @@ export class Segmenter extends EventEmitter {
     const {
       input,
       config,
-      height,
+      variantId,
       startTime = 0,
       startNumber = 0,
       format,
@@ -88,8 +108,23 @@ export class Segmenter extends EventEmitter {
       videoStreamIndex = 0,
     } = this.options;
 
-    // Check if this is the original variant (height = -1)
-    const isOriginal = height === -1;
+    // Find the variant configuration
+    const variant = config.variants.find(v => v.id === variantId);
+    if (!variant && variantId !== 'audio') {
+      throw new Error(`Variant with ID ${variantId} not found`);
+    }
+
+    // Check if this is the original variant (height = -1, bitrate = 'original')
+    const isOriginal = variant?.height === -1 && variant?.bitrate === 'original';
+    const height = variant?.height || (variantId === 'audio' ? 0 : 720);
+
+    // Get video info to analyze source audio streams
+    const videoInfo = await getVideoInfo(input);
+    const audioStream = videoInfo.streams.find(s => s.codec_type === 'audio');
+    const sourceAudioCodec = audioStream?.codec_name;
+
+    // Select optimal audio codec based on source and client preferences
+    const selectedAudioCodec = selectOptimalAudioCodec(sourceAudioCodec, config.audio.defaultCodec || 'aac');
     let videoCodec = 'libx264';
     let videoOptions = ['-preset', config.preset];
     let inputArgs: string[] = [];
@@ -232,7 +267,7 @@ export class Segmenter extends EventEmitter {
       for (let i = 0; i < audioStreamCount; i++) {
         audioArgs.push(
           '-map', `0:a:${i}`,
-          '-c:a', config.audio.codec,
+          '-c:a', selectedAudioCodec,
           '-b:a', config.audio.bitrate,
           '-ac', config.audio.channels.toString(),
           ...formatFlags,
@@ -278,7 +313,7 @@ export class Segmenter extends EventEmitter {
         ...subtitleMaps,
         '-c:v', videoCodec, ...videoOptions,
         ...(filter ? ['-vf', filter] : []),
-        '-c:a', config.audio.codec, '-b:a', config.audio.bitrate, '-ac', config.audio.channels.toString(),
+        '-c:a', selectedAudioCodec, '-b:a', config.audio.bitrate, '-ac', config.audio.channels.toString(),
         // Assuming ffmpeg handles subtitle mapping to webvtt/ttml for DASH if streams are mapped
         '-adaptation_sets', 'id=0,streams=v id=1,streams=a id=2,streams=s',
         path.join(outputDir, getDashManifestFilename()),

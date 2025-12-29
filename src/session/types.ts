@@ -18,7 +18,8 @@ export interface ClientInfo {
 export interface SessionData {
   id: string;
   startSegment: number;
-  height: number;
+  variantId: string; // Variant ID instead of height
+  height: number; // Keep for backward compatibility - extracted from variantId
   format: string;
   lastUsed: number;
   isPaused: boolean;

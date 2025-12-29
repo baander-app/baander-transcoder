@@ -12,12 +12,14 @@ import { MetadataWorker } from '../workers/metadataWorker';
 import { queueManager } from '../services/queueManager';
 import { validatePaths } from '../services/validator';
 import { ipcServer, type IPCMessageRegistry } from '../ipc';
+import { SocketServer } from '../socket';
 
 export function registerServeCommand(program: commander.Command) {
   const serveCmd = program.command('serve');
   serveCmd.option('-c, --config <path>', 'config file', './config.json');
   serveCmd.option('-d, --data-dir <path>', 'data directory', '.baander-transcoder');
   serveCmd.option('-l, --listen <addr>', 'listen address', '127.0.0.1:8080');
+  serveCmd.option('-s, --socket <path>', 'enable Unix socket server at path');
   serveCmd.option('--verbose', 'enable verbose logging');
   serveCmd.action(async (options) => {
     if (cluster.isPrimary) {
@@ -46,6 +48,21 @@ export function registerServeCommand(program: commander.Command) {
         }
       }
 
+      // Override socket config from CLI options
+      if (options.socket !== undefined) {
+        if (!config.socket) {
+          config.socket = {
+            enabled: true,
+            path: options.socket,
+            maxMessageSize: 100 * 1024 * 1024,
+            connectionTimeout: 30000,
+          };
+        } else {
+          config.socket.enabled = true;
+          config.socket.path = options.socket;
+        }
+      }
+
       setFFmpegPaths(config.ffmpeg!, config.ffprobe!);
       if (config.logging) {
         configureLogger(config.logging);
@@ -66,11 +83,38 @@ export function registerServeCommand(program: commander.Command) {
           cleanupManager.start();
         }
 
+        // Start HTTP server
         const [host, port] = options.listen.split(':');
         const server = app.listen(parseInt(port), host, () => {
           logger.info(`Web server running at http://${host}:${port}`);
           logger.debug(app._router);
         });
+
+        // Start Unix socket server if enabled
+        let socketServer: SocketServer | null = null;
+        if (config.socket?.enabled) {
+          socketServer = new SocketServer({
+            socketPath: config.socket.path,
+            app,
+            maxMessageSize: config.socket.maxMessageSize,
+            connectionTimeout: config.socket.connectionTimeout,
+          });
+
+          await socketServer.start();
+          logger.info(`Socket server running on ${config.socket.path}`);
+
+          socketServer.on('connection', (socket) => {
+            logger.debug(`New socket connection. Active: ${socketServer?.getConnectionCount()}`);
+          });
+
+          socketServer.on('disconnect', (socket) => {
+            logger.debug(`Socket connection closed. Active: ${socketServer?.getConnectionCount()}`);
+          });
+
+          socketServer.on('error', (err) => {
+            logger.error(`Socket server error: ${err.message}`);
+          });
+        }
 
         const shutdown = async () => {
           logger.info('Web worker shutting down...');
@@ -80,6 +124,12 @@ export function registerServeCommand(program: commander.Command) {
           if (cleanupManager) {
             cleanupManager.stop();
           }
+
+          if (socketServer) {
+            await socketServer.stop();
+            logger.info('Socket server closed.');
+          }
+
           server.close(() => {
             logger.info('HTTP server closed.');
             process.exit(0);
@@ -116,7 +166,7 @@ export function registerServeCommand(program: commander.Command) {
 
         // Set up typed IPC message handlers
         ipcServer.onMessage('startSession', async (data: IPCMessageRegistry['startSession']) => {
-          const {sessionId, file, config, height, outputDir, format, startTime, startNumber, videoStreamIndex} = data;
+          const {sessionId, file, config, variantId, outputDir, format, startTime, startNumber, videoStreamIndex} = data;
 
           if (sessions.has(sessionId)) {
             ipcServer.send('sessionStarted', { sessionId });
@@ -130,7 +180,7 @@ export function registerServeCommand(program: commander.Command) {
               input: file,
               outputDir,
               config,
-              height,
+              variantId,
               startTime,
               startNumber,
               format: format || 'hls',

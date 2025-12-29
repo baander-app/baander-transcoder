@@ -1,6 +1,6 @@
 import * as express from 'express';
 import { logger } from '../services/logger';
-import { transcodeOptions, TranscodeOptions } from '../services/transcoder';
+import { mediaTranscodeOptions, TranscodeOptions } from '../services/mediaTranscoder';
 
 export function handleError(err: any, res: express.Response) {
   if (err.message === 'Not found') {
@@ -16,7 +16,7 @@ export function handleError(err: any, res: express.Response) {
 export function getOptionsOverride(req: express.Request): Partial<TranscodeOptions> {
   const override: any = {};
   if (req.query.vcodec) override.videoCodec = req.query.vcodec;
-  if (req.query.acodec) override.audio = {...transcodeOptions.audio, codec: req.query.acodec};
+  if (req.query.acodec) override.audio = {...mediaTranscodeOptions.audio, codec: req.query.acodec};
   if (req.query.hwaccel) override.hwAccel = req.query.hwaccel;
   if (req.query.lowLatency === 'true') override.lowLatency = true;
   return override;

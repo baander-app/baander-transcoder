@@ -1,6 +1,6 @@
 import * as express from 'express';
 import * as os from 'os';
-import { transcoders } from '../services/transcoder';
+import { mediaTranscoders } from '../services/mediaTranscoder';
 import { queueManager } from '../services/queueManager';
 
 export const monitorRouter = express.Router();
@@ -12,14 +12,14 @@ monitorRouter.get('/health', (req, res) => {
 monitorRouter.get('/monitor', (req, res) => {
   const activeSessions = [];
 
-  for (const [key, transcoder] of transcoders.entries()) {
+  for (const [key, transcoder] of mediaTranscoders.entries()) {
     if (transcoder.isRunning) {
         const sessions = transcoder.getSessions();
         for (const session of sessions) {
             activeSessions.push({
                 sessionId: session.id,
                 inputSource: transcoder.getInputSource(),
-                height: session.height,
+                height: session.height || 0, // SessionData still has height for backward compatibility
                 format: session.format,
                 startTime: transcoder.getLastRequestTime().toISOString(), 
                 segmentsGenerated: transcoder.getAvailableSegmentsCount(session.id)

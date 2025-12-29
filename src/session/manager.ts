@@ -32,7 +32,7 @@ export class SessionManager {
   }
 
   createSession(
-    height: number,
+    variantId: string,
     format: string,
     startSegment: number,
     inputSource: string,
@@ -42,7 +42,7 @@ export class SessionManager {
     // Check if session already exists
     const existingSession = Session.createFromInput(
       inputSource,
-      height,
+      variantId,
       format,
       startSegment,
       this.getConfig(),
@@ -58,7 +58,7 @@ export class SessionManager {
     this.sessions.set(existingSession.id, existingSession);
 
     logger.info(`[SessionManager] Created new session: ${existingSession.id}`);
-    logger.debug(`[SessionManager] Session: height=${height}, format=${format}, startSegment=${startSegment}`);
+    logger.debug(`[SessionManager] Session: variantId=${variantId}, format=${format}, startSegment=${startSegment}`);
 
     return existingSession;
   }
@@ -85,7 +85,7 @@ export class SessionManager {
   }
 
   findCompatibleSessions(
-    height: number,
+    variantId: string,
     format: string,
     segmentNumber: number,
     includeInitOnly: boolean = false,
@@ -93,7 +93,7 @@ export class SessionManager {
     const compatibleSessions: Session[] = [];
 
     for (const session of this.sessions.values()) {
-      if (session.height === height && session.format === format) {
+      if (session.variantId === variantId && session.format === format) {
         if (includeInitOnly) {
           compatibleSessions.push(session);
         } else if (session.canServeSegment(segmentNumber)) {
@@ -307,7 +307,8 @@ export class SessionManager {
       lastUsed: session.lastUsed,
       maxSegment: session.maxSegment,
       startSegment: session.startSegment,
-      height: session.height,
+      variantId: session.variantId,
+      height: session.height, // Keep for backward compatibility
       format: session.format,
     }));
 

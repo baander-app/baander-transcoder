@@ -32,13 +32,14 @@
     "onDemand": true,
     "idleTimeout": 5,
     "throttleBufferSize": 300,
-    "minThrottleBufferSize": 10,
+    "minThrottleBufferSize": 60,
     "segmentDuration": 6,
     "hwAccel": "cpu",
     "videoCodec": "h264",
     "hlsSegmentType": "fmp4",
     "lowLatency": false,
-    "audioOnly": false
+    "audioOnly": false,
+    "maxTranscoders": 2
   },
   "ffmpeg": "ffmpeg",
   "ffprobe": "ffprobe",
