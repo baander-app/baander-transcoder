@@ -1,0 +1,50 @@
+{
+  "name": "baander-transcoder",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "bin": {
+    "baander-transcoder": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "postbuild": "node postbuild.js",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "async-mutex": "^0.5.0",
+    "chokidar": "^3.6.0",
+    "commander": "^11.1.0",
+    "compression": "^1.8.1",
+    "express": "5.1.0",
+    "fs-extra": "^11.3.2",
+    "lodash": "^4.17.21",
+    "mime": "^4.1.0",
+    "moment": "^2.30.1",
+    "morgan": "^1.10.1",
+    "send": "^1.2.0",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/errorhandler": "^1.5.3",
+    "@types/express": "^5.0.5",
+    "@types/fs-extra": "^11.0.4",
+    "@types/lodash": "^4.17.21",
+    "@types/mime": "^2.0.3",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^24.10.1",
+    "@types/send": "^1.2.1",
+    "@types/supertest": "^6.0.3",
+    "errorhandler": "^1.5.1",
+    "rimraf": "^6.1.2",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite-node": "^5.2.0",
+    "vitest": "^4.0.13"
+  }
+}
